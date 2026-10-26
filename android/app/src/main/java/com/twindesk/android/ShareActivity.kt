@@ -91,7 +91,7 @@ class AdbActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val core = Core.get(this)
-        if (core.adb.enable(true)) {
+        if (core.adb.enable(true, byPerson = true)) {
             core.adb.sendState()
             Toast.makeText(applicationContext, "Wireless debugging is on", Toast.LENGTH_SHORT).show()
         } else core.adb.openSettings()

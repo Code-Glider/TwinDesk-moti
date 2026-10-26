@@ -1303,6 +1303,16 @@ private fun GeneralPage(core: Core, v: Int) {
                 Primary("Guide") { Guide.open.value = true }
             }
         }
+        // Off until switched on (Adb.autoOffEnabled): only what TwinDesk switched on goes off again.
+        SwitchRow(
+            "Turn off wireless debugging when disconnected",
+            when {
+                !core.adb.canEnable -> "Once paired with $name: off again 2 minutes after it disconnects, when TwinDesk switched it on"
+                core.adb.autoOffEnabled -> "2 minutes after $name disconnects, when TwinDesk switched it on, and on again as it connects. Switched on by you, it stays on"
+                else -> "Wireless debugging stays on after $name disconnects"
+            },
+            core.adb.autoOffEnabled, enabled = core.adb.canEnable,
+        ) { core.adb.setAutoOff(it) }
         Setup("Nearby devices", "Bluetooth and Wi-Fi Direct, for $name when it isn’t on this network", nearbyAllowed, "Allow") {
             askNearby.launch(nearbyPerms)
         }

@@ -130,7 +130,7 @@ class AdbTile : TileService() {
     override fun onClick() {
         val core = Core.get(this)
         if (core.adb.canEnable) {
-            core.adb.enable(!core.adb.wifiDebugging)
+            core.adb.enable(!core.adb.wifiDebugging, byPerson = true) // the person's own switch: auto-off leaves it on
             core.adb.sendState()
             onStartListening()
             return

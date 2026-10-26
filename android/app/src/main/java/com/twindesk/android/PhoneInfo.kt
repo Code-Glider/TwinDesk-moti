@@ -26,6 +26,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Base64
 import android.view.Display
@@ -199,28 +200,43 @@ class Adb(core: Core) : Feature(core) {
     // once, on and off without end.
     private var trying = false
 
-    // Auto-off: wireless debugging is the phone's widest door, so once the computer has been gone
-    // for AUTO_OFF_MS (not a brief drop: the Mac's restarts reconnect within seconds) it's switched
-    // off here. Connecting switches it back on (Core.connect, check()), so nobody has to remember.
-    // Its own Handler: check() clears everything posted on `main`.
+    // Auto-off (General › Allow › "Turn off wireless debugging when disconnected", off until switched
+    // on): wireless debugging is the phone's widest door, so once the computer has been gone for
+    // AUTO_OFF_MS (not a brief drop: a computer's restart reconnects within seconds) it's switched
+    // off here, but only when TwinDesk switched it on (`ours`): switched on by the person (Settings,
+    // the Quick Settings tile, the home screen shortcut) it stays on. Connecting switches it back on
+    // (Core.connect, check()). Its own Handler: check() clears everything posted on `main`.
     private val autoOff = Handler(Looper.getMainLooper())
-    val autoOffEnabled get() = core.store.flag("adb.autoOff", true)
+    val autoOffEnabled get() = core.store.flag("adb.autoOff", false)
     fun setAutoOff(on: Boolean) {
         core.store.setFlag("adb.autoOff", on)
-        if (!on) autoOff.removeCallbacksAndMessages(null)
+        if (on) scheduleAutoOff() else autoOff.removeCallbacksAndMessages(null)
         core.changed()
     }
+    private var ours: Boolean
+        get() = core.store.flag("adb.ours", false)
+        set(v) = core.store.setFlag("adb.ours", v)
+    private var ourWriteAt = 0L // when enable() last wrote the setting: its own change, not the person's
+    private var seenOn = false // wireless debugging as the observer last saw it
     private fun scheduleAutoOff() {
         autoOff.removeCallbacksAndMessages(null)
-        if (!autoOffEnabled || !canEnable) return
+        if (!autoOffEnabled || !canEnable || !ours || core.link.connected) return
         autoOff.postDelayed({
-            if (!core.link.connected && wifiDebugging && enable(false)) sendState()
+            if (autoOffEnabled && ours && !core.link.connected && wifiDebugging && enable(false)) sendState()
         }, AUTO_OFF_MS)
     }
 
     init {
+        // Off (after a reboot, by the person, MIUI on a lock): not ours any more. Switched on by
+        // someone else than enable(): the person's, it stays on.
+        seenOn = wifiDebugging
+        if (!seenOn) ours = false
         val obs = object : ContentObserver(main) {
             override fun onChange(selfChange: Boolean) {
+                val on = wifiDebugging
+                if (!on) ours = false
+                else if (!seenOn && SystemClock.elapsedRealtime() - ourWriteAt > 3000) ours = false
+                seenOn = on
                 sendState()
                 if (!trying || wifiDebugging) check()
             }
@@ -293,9 +309,13 @@ class Adb(core: Core) : Feature(core) {
         sendState()
     }
 
-    fun enable(on: Boolean): Boolean {
+    // byPerson: the Quick Settings tile and the home screen shortcut, the person's own switch (auto-off
+    // leaves it on); TwinDesk's own (connecting, the computer asking, Turn on in this app) is `ours`.
+    fun enable(on: Boolean, byPerson: Boolean = false): Boolean {
         if (!canEnable || on && !onWifiNetwork) return false
-        return runCatching {
+        val was = wifiDebugging
+        ourWriteAt = SystemClock.elapsedRealtime()
+        val ok = runCatching {
             if (on) Settings.Global.putInt(cr, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 1)
             // Android forgets a computer's pairing after 7 days without a connection (the default
             // "adb authorization timeout"); 0 keeps it.
@@ -304,6 +324,11 @@ class Adb(core: Core) : Feature(core) {
             if (on) Settings.Global.putInt(cr, Settings.Global.ADB_ENABLED, 1)
             Settings.Global.putInt(cr, "adb_wifi_enabled", if (on) 1 else 0)
         }.isSuccess
+        if (ok) {
+            if (!on || byPerson) ours = false
+            else if (!was) { ours = true; scheduleAutoOff() } // a connect that doesn't happen: off again too
+        }
+        return ok
     }
 
     // Is wireless debugging on while we're connected? If not: switch it on if we may (a few times:
