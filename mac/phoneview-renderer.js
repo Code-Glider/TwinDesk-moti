@@ -10,6 +10,8 @@
   const api = window.phoneview;
   const q = new URLSearchParams(location.search);
   const kind = q.get('kind') || 'screen';
+  // Camera › Virtual camera: a camera's window is hidden and its frames go to that camera (shared/vcam-feed.js).
+  const vcam = kind === 'camera' && q.get('vcam') === '1' && window.VcamFeed ? window.VcamFeed((buf) => api.vcam(buf)) : null;
   document.body.classList.add(kind);
   document.getElementById('title').textContent = q.get('title') || 'Phone';
   const canvas = document.getElementById('screen');
@@ -60,6 +62,7 @@
           fit();
         }
         ctx.drawImage(frame, 0, 0);
+        if (vcam) vcam.push(frame, frame.displayWidth, frame.displayHeight);
         frame.close();
         if (!status.hidden) setStatus('');
       },

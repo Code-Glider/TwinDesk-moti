@@ -94,9 +94,11 @@ function normalize(s) {
       framegen: bool(mon.framegen, false), // in-between frames on the GPU (shared/framegen.js), off by default
     },
     // Camera tab (shared/camshare.js): this computer's camera to the other one, off until turned
-    // on; device: which camera (a deviceId), '' = the default one
+    // on; device: which camera (a deviceId), '' = the default one; virtual: what Show opens goes to
+    // the virtual camera (shared/vcam.js), off until turned on
     camera: {
       share: bool((s.camera || {}).share, false),
+      virtual: bool((s.camera || {}).virtual, false),
       device: typeof (s.camera || {}).device === 'string' ? s.camera.device.slice(0, 200) : '',
     },
     audio: {

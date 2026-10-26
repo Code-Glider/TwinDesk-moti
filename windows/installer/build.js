@@ -76,6 +76,13 @@ async function main() {
     if (fs.existsSync(from)) copy(from, path.join(STAGE, 'windows-helper', 'bin', f));
     else console.log('note: no windows-helper/bin/' + f + ' — calls won’t play on the PC (build the helper on Windows)');
   }
+  // Camera › Virtual camera (vcam.js): its media source for each Windows architecture and the .exe
+  // that adds and feeds it (built when Visual Studio's C++ tools are there).
+  for (const f of ['twindesk-vcam.exe', 'twindesk-vcam-x64.dll', 'twindesk-vcam-arm64.dll']) {
+    const from = path.join(ROOT, 'windows-helper', 'bin', f);
+    if (fs.existsSync(from)) copy(from, path.join(STAGE, 'windows-helper', 'bin', f));
+    else console.log('note: no windows-helper/bin/' + f + ' — no virtual camera there (build the helper with Visual Studio’s C++ tools)');
+  }
   // A phone: its screen, apps and input go through adb and scrcpy-server (phone-bridge.js).
   if (!fs.existsSync(path.join(WIN, 'vendor', 'scrcpy-server'))) {
     copy(path.join(ROOT, 'mac', 'vendor', 'scrcpy-server'), path.join(STAGE, 'windows', 'vendor', 'scrcpy-server'));

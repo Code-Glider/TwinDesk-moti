@@ -57,6 +57,13 @@
 !macroend
 
 !macro customUnInstall
+  ; Camera › Virtual camera (vcam.js): the camera and its media source, but not on an update (the
+  ; new version keeps them, so it needs no administrator prompt again).
+  ${ifNot} ${isUpdated}
+    nsExec::Exec '"$INSTDIR\resources\app\windows-helper\bin\twindesk-vcam.exe" remove'
+    nsExec::Exec 'cmd /c for %f in ("%ProgramData%\TwinDesk\vcam\twindesk-vcam-*.dll") do "%SystemRoot%\System32\regsvr32.exe" /u /s "%f"'
+    RMDir /r "$COMMONPROGRAMDATA\TwinDesk\vcam"
+  ${endIf}
   ; Calls on this PC: its package (this user's) and its certificate.
   nsExec::Exec 'powershell -NoProfile -NonInteractive -Command "Get-AppxPackage -Name TwinDesk.Calls | Remove-AppxPackage"'
   nsExec::Exec 'certutil -delstore TrustedPeople TwinDesk'

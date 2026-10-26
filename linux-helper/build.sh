@@ -20,4 +20,6 @@ ${CC:-gcc} -O2 -Wall -Wextra -std=gnu11 src/*.c -o bin/macshare-linuxhelper -lX1
 ${CC:-gcc} -O2 -Wall -Wextra -std=gnu11 -DMULTI src/*.c -o bin/macshare-linuxhelper-multi -lX11 -lXi -lXtst -lXrandr -lXfixes -lm -pthread $BLE
 # Hosting Wi-Fi Direct beside the adapter's own network (linux/wifi.js; installed as root when it's first needed).
 ${CC:-gcc} -O2 -Wall -Wextra -std=gnu11 wifiap/wifiap.c -o bin/twindesk-wifiap
-echo "built bin/macshare-linuxhelper bin/macshare-linuxhelper-multi bin/twindesk-wifiap"
+# Camera › Virtual camera's writer (linux/vcam.js): frames to the v4l2loopback device.
+${CC:-gcc} -O2 -Wall -Wextra -std=gnu11 vcam/vcam.c -o bin/twindesk-vcam
+echo "built bin/macshare-linuxhelper bin/macshare-linuxhelper-multi bin/twindesk-wifiap bin/twindesk-vcam"

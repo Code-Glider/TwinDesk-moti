@@ -472,6 +472,9 @@ function setupIpc(ctx) {
       else if (m.do === 'device') c.setDevice(m.id);
       else if (m.do === 'stop') c.stopSending();
       else if (m.do === 'devices') c.listDevices();
+      // Camera › Virtual camera (shared/vcam.js).
+      else if (m.do === 'virtual' && ctx.vcam) ctx.vcam.setOn(m.on === true);
+      else if (m.do === 'vcamRemove' && ctx.vcam) ctx.vcam.remove();
     },
     // "Share sound with the screen" (Display › Mac → PC).
     setScreenSound(on) {

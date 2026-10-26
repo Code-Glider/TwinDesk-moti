@@ -27,6 +27,7 @@ const identity = require('./identity');
 const Screen = require('./screen');
 const Clip = require('./clip');
 const { CamShare } = require('../shared/camshare.js');
+const { VirtualCam } = require('../shared/vcam.js');
 const { NowPlaying } = require('../shared/nowplaying.js');
 const { BtAudio } = require('../shared/btaudio.js');
 const { LinuxA2dp } = require('./a2dp');
@@ -106,6 +107,7 @@ let device = null;
 let screen = null;
 let clip = null;
 let camShare = null; // Camera tab: the cameras of the two computers (shared/camshare.js)
+let vcam = null; // Camera › Virtual camera: Show goes to a camera apps can pick (shared/vcam.js, vcam.js)
 let nowPlaying = null; // what plays on the phone, for the Overview's media controls (shared/nowplaying.js)
 let btAudio = null; // the phone's sound here over Bluetooth (shared/btaudio.js)
 let helper = null;
@@ -198,6 +200,7 @@ function start() {
   clip = new Clip(link, () => settings.clipboard, pushState, { popup: (kind, text) => hud && hud.show(kind, text), peerName });
   // With a computer (a phone's camera is phoneview.js openCamera).
   const computer = () => link.status.state === 'connected' && !(link.current && link.current.os === P.OS.ANDROID);
+  vcam = new VirtualCam({ driver: require('./vcam'), cfg: () => settings.camera, save: saveSettings, onChange: pushState, onReady: reopenCameras });
   camShare = new CamShare({
     link: { on: (t, fn) => link.on(t, fn), send: (m) => link.send(m), connected: computer, ble: () => !!(link.current && link.current.transport === 'ble'), closed: (fn) => link.on('closed', fn) },
     cfg: () => settings.camera,
@@ -205,7 +208,10 @@ function start() {
     popup: (kind, text) => hud && hud.show(kind, text),
     peerName,
     onChange: pushState,
+    virtual: () => vcam.ready,
   });
+  if (phoneViews) phoneViews.vcam = vcam; // the phone may have started first
+  vcam.check();
   screen = new Screen({
     link,
     clip,
@@ -320,7 +326,7 @@ function start() {
   });
   updates.start();
   const ipc = setupIpc({ link, discovery, screen, clip, kvm, fileDrop, smb, fileClip, vdd, sound, pcScreen, notifs, wake, terminal, sshd, apps, pcApps, peerApps, updates, settings, save: saveSettings, push: pushState, buildState,
-    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get camShare() { return camShare; }, get nowPlaying() { return nowPlaying; }, get btAudio() { return btAudio; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
+    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get camShare() { return camShare; }, get vcam() { return vcam; }, get nowPlaying() { return nowPlaying; }, get btAudio() { return btAudio; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
     get net() { return net; }, get wifi() { return wifi; }, applyNet, joinHotspot, openBluetoothSettings,
     checkFirewall, fixFirewall, fixInput, setStartup, onApp: () => updateTray(buildState()) });
   pairSync = new PairSync({ link, settings, save: saveSettings, set: ipc.set }); // Two-way switches per pair
@@ -427,6 +433,7 @@ function startPhone(server, pairing) {
   });
   phone.bridge.on('popup', (kind, text) => hud.show(kind, text));
   phoneViews = new PhoneViews({ bridge: phone.bridge, phone, getSettings: () => settings, server: pl, fileSend: fileDrop });
+  phoneViews.vcam = vcam;
   nowPlaying = new NowPlaying({ server: pl, cfg: () => settings.audio });
   nowPlaying.on('change', pushState);
   // Audio › Play phone sound here (Bluetooth): this computer as the phone's Bluetooth speaker (a2dp.js).
@@ -787,6 +794,14 @@ function openMacApp(id) {
 // ---- state ----
 
 let pushQueued = false;
+// The virtual camera went on or off: a camera open now reopens the other way (a window, or hidden
+// and in the camera).
+function reopenCameras() {
+  if (camShare) camShare.reopen();
+  const cam = phoneViews && [...phoneViews.views.values()].find((v) => v.kind === 'camera');
+  if (cam && !!cam.virtual !== vcam.ready) phoneViews.openCamera({ facing: cam.facing });
+}
+
 function pushState() {
   if (pushQueued) return;
   pushQueued = true;
@@ -872,6 +887,7 @@ function buildState() {
     monitor: settings.monitor,
     clipboard: { ...settings.clipboard, ...clip.view },
     camera: camShare.state,
+    vcam: vcam.view(),
     phoneMedia: nowPlaying ? nowPlaying.view : null,
     btAudio: btAudio ? btAudio.view : null,
     ui: settings.ui,

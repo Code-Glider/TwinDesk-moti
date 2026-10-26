@@ -86,10 +86,19 @@ jobs:
 
       - name: Build macOS app and disk image
         working-directory: mac
+        # Camera › Virtual camera's extension (build-app.sh) only with the two provisioning profiles
+        # that allow system extensions (base64 secrets); without them the app is built without it.
         run: |
+          if [ -n "$MAC_APP_PROFILE_BASE64" ] && [ -n "$MAC_CAMERA_PROFILE_BASE64" ]; then
+            echo "$MAC_APP_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/app.provisionprofile"
+            echo "$MAC_CAMERA_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/camera.provisionprofile"
+            export MAC_APP_PROFILE="$RUNNER_TEMP/app.provisionprofile" MAC_CAMERA_PROFILE="$RUNNER_TEMP/camera.provisionprofile"
+          fi
           npm run dist
           npm run dmg
         env:
+          MAC_APP_PROFILE_BASE64: ${{ secrets.MAC_APP_PROFILE_BASE64 }}
+          MAC_CAMERA_PROFILE_BASE64: ${{ secrets.MAC_CAMERA_PROFILE_BASE64 }}
           MAC_IDENTITY: ${{ env.MAC_IDENTITY || secrets.MAC_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}

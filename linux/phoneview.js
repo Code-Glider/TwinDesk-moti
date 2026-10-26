@@ -73,7 +73,7 @@ class PhoneViews extends EventEmitter {
   }
 
   list() {
-    return [...this.views.values()].filter((v) => v.kind !== 'sound' && v.kind !== 'netsound').map((v) => ({ id: v.id, kind: v.kind, app: v.app || null, title: v.title }));
+    return [...this.views.values()].filter((v) => v.kind !== 'sound' && v.kind !== 'netsound').map((v) => ({ id: v.id, kind: v.kind, app: v.app || null, title: v.title, virtual: !!v.virtual }));
   }
 
   get focused() {
@@ -96,13 +96,18 @@ class PhoneViews extends EventEmitter {
   // 'front'; the camera picks its best size up to 1920 on the long side (a size it doesn't have
   // would fail), at 30 fps. Its light and zoom from the window's buttons.
   openCamera(opts = {}) {
+    // Camera › Virtual camera on (shared/vcam.js): a hidden window, its frames to that camera.
+    const virtual = !!(this.vcam && this.vcam.ready);
+    const want = opts.facing === 'front' ? 'front' : 'back';
     const open = [...this.views.values()].find((v) => v.kind === 'camera');
-    if (open) return open.win.show(), open.win.focus();
+    if (open && !!open.virtual === virtual && (!virtual || open.facing === want)) return virtual || (open.win.show(), open.win.focus());
+    if (open) open.win.close();
     this.cameraFacing = opts.facing === 'front' ? 'front' : 'back';
     const name = ((this.server.current && this.server.current.name) || 'Phone') + ' Camera';
     const cam = { videoSource: 'camera', cameraFacing: this.cameraFacing, cameraFps: 30, maxSize: 1920 };
     if (/^\d{2,5}x\d{2,5}$/.test(String(opts.size || ''))) cam.cameraSize = opts.size;
-    this._open({ kind: 'camera', title: name, width: 854, height: 512, opts: this.bridge.sessionOpts('camera', cam) });
+    const v = this._open({ kind: 'camera', title: name, width: 854, height: 512, opts: this.bridge.sessionOpts('camera', cam), hidden: virtual, virtual });
+    if (v) v.facing = this.cameraFacing;
   }
 
   openApp(pkg, name) {
@@ -168,7 +173,7 @@ class PhoneViews extends EventEmitter {
     return [...this.views.values()].some((v) => v.kind === 'screen' && v.session && v.session.opts.audio);
   }
 
-  _open({ kind, app, title, width, height, opts, hidden = false }) {
+  _open({ kind, app, title, width, height, opts, hidden = false, virtual = false }) {
     if (!this.bridge.serial && kind !== 'netsound') {
       // Wireless debugging not up yet (just on Wi-Fi after Bluetooth): main.js opens it once it is.
       if (this.onNoAdb && this.onNoAdb({ kind, app, title, width, height, opts, hidden })) return;
@@ -182,9 +187,9 @@ class PhoneViews extends EventEmitter {
       // click never comes: without this its AudioContext stays suspended and silent).
       webPreferences: { preload: path.join(__dirname, 'preload-phoneview.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' },
     });
-    const v = { id, kind, app, title, win, session: null, keys: new KeyState(), size: null, ready: false, queue: [] };
+    const v = { id, kind, app, title, win, session: null, keys: new KeyState(), size: null, ready: false, queue: [], virtual };
     this.views.set(id, v);
-    win.loadFile(path.join(__dirname, 'phoneview.html'), { query: { kind, title } });
+    win.loadFile(path.join(__dirname, 'phoneview.html'), { query: { kind, title, vcam: virtual ? '1' : '0' } });
     if (!hidden) win.once('ready-to-show', () => win.show());
     win.webContents.once('did-finish-load', () => {
       v.ready = true;
@@ -202,6 +207,7 @@ class PhoneViews extends EventEmitter {
       console.log(`[phone] ${kind} window: ${e.message}`);
       this._send(v, 'phoneview:status', { error: e.message });
     });
+    return v;
   }
 
   _send(v, ch, m) {

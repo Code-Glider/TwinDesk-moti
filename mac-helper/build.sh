@@ -36,6 +36,12 @@ swiftc -O -swift-version 5 -target "$TARGET" -framework IOBluetooth \
   -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker Sources/macshare-calls/Info.plist \
   Sources/macshare-calls/main.swift -o .build/release/macshare-calls
 echo "built .build/release/macshare-calls"
+# Camera › Virtual camera (mac/vcam.js): the Camera Extension and the tool that installs and feeds
+# it (packed into TwinDesk.app by mac/build-app.sh when it's signed for system extensions).
+swiftc -O -swift-version 5 -target "$TARGET" -framework CoreMediaIO -framework CoreMedia -framework CoreVideo -framework IOKit   Sources/twindesk-camera/main.swift -o .build/release/twindesk-camera
+echo "built .build/release/twindesk-camera"
+swiftc -O -swift-version 5 -target "$TARGET" -framework CoreMediaIO -framework CoreMedia -framework CoreVideo -framework SystemExtensions   Sources/twindesk-vcam/main.swift -o .build/release/twindesk-vcam
+echo "built .build/release/twindesk-vcam"
 # Share menu extension (packed into TwinDesk.app/Contents/PlugIns by mac/build-app.sh).
 swiftc -O -swift-version 5 -target "$TARGET" -application-extension -parse-as-library \
   -module-name MacShareShare -framework AppKit -Xlinker -e -Xlinker _NSExtensionMain \

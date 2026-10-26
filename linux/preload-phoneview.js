@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('phoneview', {
     if (['size', 'video', 'audio', 'netaudio', 'status'].includes(ch)) ipcRenderer.on(`phoneview:${ch}`, (_e, m) => fn(m));
   },
   send: (m) => ipcRenderer.send('phoneview:in', m),
+  vcam: (buf) => ipcRenderer.send('vcam:frame', buf), // a camera's frames to the virtual camera (shared/vcam.js)
   // files: an array of File (a FileList reaches this side of the bridge as a plain object, which can't be iterated)
   drop: (files) => ipcRenderer.send('phoneview:drop', [...files].map((f) => { try { return webUtils.getPathForFile(f); } catch { return ''; } }).filter(Boolean)),
 });

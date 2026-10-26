@@ -81,7 +81,7 @@ const DEFAULT_SETTINGS = {
   app: { openAtLogin: false, keepAwake: true, hud: true }, // hud = popup when switching computers
   updates: { auto: true, notified: '' }, // check GitHub for new releases; notified = last version announced
   audio: { send: false, receive: false, muteLocal: false, volume: 1, phoneMedia: true }, // Independent, both ways; phoneMedia: a phone's media controls on Overview
-  camera: { share: false, device: '' }, // Camera tab (shared/camshare.js): this Mac's camera to the other computer, off until turned on
+  camera: { share: false, device: '', virtual: false }, // Camera tab (shared/camshare.js): this Mac's camera to the other computer, off until turned on; virtual: Show goes to the virtual camera (shared/vcam.js)
   terminal: { allowPc: false, connectPc: false }, // the other computer -> this Mac shell; this Mac -> the other one (`ssh twindesk`)
   files: { acceptDrops: true, folder: '', reveal: true, dragEdge: true, // '' = Downloads; dragEdge = drag.policy
     shortcuts: true, copyKeys: 'Control+Alt+C', pasteKeys: 'Control+Alt+V' }, // Copy/paste files

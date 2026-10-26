@@ -1,5 +1,6 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
 // The viewer (camera-view.html): the other computer's camera, answered recvonly to its offer.
+// With vcam=1 the window is hidden and its frames go to the virtual camera (shared/vcam-feed.js).
 'use strict';
 
 const api = window.cam;
@@ -7,9 +8,29 @@ const video = document.getElementById('video');
 const status = document.getElementById('status');
 const again = document.getElementById('again');
 const mirror = document.getElementById('mirror');
-const name = new URLSearchParams(location.search).get('name') || 'the other computer';
+const query = new URLSearchParams(location.search);
+const name = query.get('name') || 'the other computer';
+const feed = query.get('vcam') === '1' && window.VcamFeed ? window.VcamFeed((buf) => api.vcam(buf)) : null;
 let pc = null;
 let pending = [];
+
+// Each frame of the track to the virtual camera, as it comes (a hidden window paints none).
+async function feedTrack(track) {
+  if (!feed) return;
+  if (typeof MediaStreamTrackProcessor === 'function') {
+    const reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      feed.push(value, value.displayWidth, value.displayHeight);
+      value.close();
+    }
+  }
+  const timer = setInterval(() => {
+    if (track.readyState === 'ended') return clearInterval(timer);
+    if (video.readyState >= 2) feed.push(video, video.videoWidth, video.videoHeight);
+  }, 1000 / 30);
+}
 
 function say(text, retry = false) {
   status.textContent = text;
@@ -32,6 +53,7 @@ async function offer(sdp) {
   me.ontrack = (e) => {
     video.srcObject = e.streams[0] || new MediaStream([e.track]);
     video.play().catch(() => {});
+    if (e.track.kind === 'video') feedTrack(e.track).catch((err) => console.warn('vcam', err.message));
   };
   me.onicecandidate = (e) => e.candidate && pc === me && api.send({ t: 'ice', candidate: e.candidate.toJSON() });
   me.onconnectionstatechange = () => {

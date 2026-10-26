@@ -110,6 +110,61 @@ cat > dist/share.entitlements <<'PLIST'
 </dict></plist>
 PLIST
 
+# Camera › Virtual camera (vcam.js): the Camera Extension and twindesk-vcam, which installs and feeds
+# it, only in a build macOS takes it from: Developer ID (MAC_IDENTITY), the team (MAC_TEAM_ID, else
+# APPLE_TEAM_ID) and two Developer ID provisioning profiles with the System Extension capability, the
+# app's (MAC_APP_PROFILE, App ID org.macshare.mac) and the extension's (MAC_CAMERA_PROFILE, App ID
+# org.macshare.mac.camera), both with the app group <team>.org.macshare.mac. Without them it isn't
+# in the app, and the Camera tab says the virtual camera needs a release build.
+TEAM=${MAC_TEAM_ID:-$APPLE_TEAM_ID}
+SYSEXT=dist/TwinDesk.app/Contents/Library/SystemExtensions/org.macshare.mac.camera.systemextension
+CAMERA=""
+if [ -n "$MAC_IDENTITY" ] && [ -n "$TEAM" ] && [ -f "$MAC_APP_PROFILE" ] && [ -f "$MAC_CAMERA_PROFILE" ]; then
+  CAMERA=1
+  mkdir -p "$SYSEXT/Contents/MacOS"
+  cp "$ROOT/mac-helper/.build/release/twindesk-camera" "$SYSEXT/Contents/MacOS/org.macshare.mac.camera"
+  cp "$MAC_CAMERA_PROFILE" "$SYSEXT/Contents/embedded.provisionprofile"
+  cp "$MAC_APP_PROFILE" dist/TwinDesk.app/Contents/embedded.provisionprofile
+  cp "$ROOT/mac-helper/.build/release/twindesk-vcam" dist/TwinDesk.app/Contents/MacOS/twindesk-vcam
+  cat > "$SYSEXT/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>org.macshare.mac.camera</string>
+  <key>CFBundleName</key><string>TwinDesk Camera</string>
+  <key>CFBundleDisplayName</key><string>TwinDesk Camera</string>
+  <key>CFBundleExecutable</key><string>org.macshare.mac.camera</string>
+  <key>CFBundlePackageType</key><string>SYSX</string>
+  <key>CFBundleShortVersionString</key><string>$VER</string>
+  <key>CFBundleVersion</key><string>$VER</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>CMIOExtension</key><dict>
+    <key>CMIOExtensionMachServiceName</key><string>$TEAM.org.macshare.mac.camera</string>
+  </dict>
+  <key>NSSystemExtensionUsageDescription</key><string>TwinDesk Camera: the other computer's or the phone's camera, as a camera every app on this Mac can pick.</string>
+</dict></plist>
+PLIST
+  cat > dist/camera.entitlements <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.app-sandbox</key><true/>
+  <key>com.apple.security.application-groups</key><array><string>$TEAM.org.macshare.mac</string></array>
+  <key>com.apple.application-identifier</key><string>$TEAM.org.macshare.mac.camera</string>
+  <key>com.apple.developer.team-identifier</key><string>$TEAM</string>
+</dict></plist>
+PLIST
+  # The app (and twindesk-vcam, signed as the app) may install system extensions.
+  cp entitlements.plist dist/app.entitlements
+  /usr/libexec/PlistBuddy -c "Add :com.apple.developer.system-extension.install bool true" \
+    -c "Add :com.apple.security.application-groups array" -c "Add :com.apple.security.application-groups:0 string $TEAM.org.macshare.mac" \
+    -c "Add :com.apple.application-identifier string $TEAM.org.macshare.mac" -c "Add :com.apple.developer.team-identifier string $TEAM" dist/app.entitlements
+  echo "Camera extension: in the app"
+else
+  echo "note: no camera extension (Camera › Virtual camera): needs MAC_IDENTITY, MAC_TEAM_ID (or APPLE_TEAM_ID), MAC_APP_PROFILE and MAC_CAMERA_PROFILE"
+fi
+
 # Signing: with Developer ID (MAC_IDENTITY) for releases, with TwinDesk's self-signed certificate
 # (scripts/signing-identity.sh) for local dev so permissions carry across updates, or ad-hoc.
 ENTITLEMENTS="entitlements.plist"
@@ -138,7 +193,7 @@ if [ -n "$MAC_IDENTITY" ]; then
   # location only to code that has them (the helpers too). --deep would sign the nested code with
   # none. Each Mach-O file first (deepest first: adb, the helpers, Electron's libraries), then
   # the frameworks and helper apps as bundles, the share extension, the app.
-  find "$APP/Contents" -type f ! -path "$APP/Contents/MacOS/*" ! -path "$APPEX/*" | while IFS= read -r f; do
+  find "$APP/Contents" -type f ! -path "$APP/Contents/MacOS/*" ! -path "$APPEX/*" ! -path "$SYSEXT/*" | while IFS= read -r f; do
     file -b "$f" | grep -q 'Mach-O' && printf '%s\t%s\n' "$(printf '%s' "$f" | tr -cd / | wc -c)" "$f"
   done | sort -rn | cut -f2- | while IFS= read -r f; do
     codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$f"
@@ -147,6 +202,11 @@ if [ -n "$MAC_IDENTITY" ]; then
     [ -e "$b" ] && codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$b"
   done
   codesign --force $OPTIONS $SIGN "$ID" --entitlements dist/share.entitlements "$APPEX"
+  if [ -n "$CAMERA" ]; then
+    codesign --force $OPTIONS $SIGN "$ID" --entitlements dist/camera.entitlements "$SYSEXT"
+    codesign --force $OPTIONS $SIGN "$ID" -i org.macshare.mac --entitlements dist/app.entitlements "$APP/Contents/MacOS/twindesk-vcam"
+    ENTITLEMENTS=dist/app.entitlements
+  fi
   codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$APP"
 else
   # One signature over the whole bundle (helpers first), so the edited Info.plist is sealed. With
@@ -157,6 +217,6 @@ else
   codesign --force $SIGN "$ID" --entitlements dist/share.entitlements "$APPEX" # --deep dropped its sandbox
   codesign --force $SIGN "$ID" "$APP"
 fi
-rm -f dist/share.entitlements
+rm -f dist/share.entitlements dist/camera.entitlements dist/app.entitlements
 codesign -dr - dist/TwinDesk.app 2>&1 | grep designated
 echo "built mac/dist/TwinDesk.app"

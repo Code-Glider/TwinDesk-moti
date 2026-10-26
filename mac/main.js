@@ -56,6 +56,7 @@ if (!app.requestSingleInstanceLock()) {
 
 const P = require('../shared/protocol.js');
 const { CamShare } = require('../shared/camshare.js');
+const { VirtualCam } = require('../shared/vcam.js');
 const { NowPlaying } = require('../shared/nowplaying.js');
 const CL = require('../shared/cursorlock.js');
 const store = require('./store');
@@ -212,6 +213,7 @@ function pushState() {
     state.keys = settings.keys;
     state.clipboard = clip ? { ...settings.clipboard, ...clip.view } : null;
     state.camera = svc && svc.camShare ? svc.camShare.state : null;
+    state.vcam = svc && svc.vcam ? svc.vcam.view() : null;
     state.phoneMedia = svc && svc.nowPlaying ? svc.nowPlaying.view : null;
     state.btAudio = null; // macOS can't be a phone's Bluetooth speaker
     state.ui = settings.ui;
@@ -545,6 +547,20 @@ app.whenReady().then(() => {
   svc.nowPlaying.on('change', pushState);
   // Camera tab: the cameras of the two computers (shared/camshare.js; a phone's is phoneViews.openCamera).
   const computer = () => !!peer.current && peer.current.os !== P.OS.ANDROID;
+  // Camera › Virtual camera (shared/vcam.js, vcam.js): Show goes to a camera apps can pick. Turned
+  // on or off, a camera open now reopens the other way (a window, or hidden and in the camera).
+  svc.vcam = new VirtualCam({
+    driver: require('./vcam'),
+    cfg: () => settings.camera,
+    save: () => store.saveSettings(settings),
+    onChange: pushState,
+    onReady: (ready) => {
+      svc.camShare.reopen();
+      const cam = [...svc.phoneViews.views.values()].find((v) => v.kind === 'camera');
+      if (cam && !!cam.virtual !== ready) svc.phoneViews.openCamera({ facing: cam.facing });
+    },
+  });
+  svc.phoneViews.vcam = svc.vcam;
   svc.camShare = new CamShare({
     link: {
       on: (t, fn) => (t === 'welcome' ? peer.on('client', (ctx) => ctx.os !== P.OS.ANDROID && fn()) : peer.on(`t:${t}`, (m) => fn(m))),
@@ -558,7 +574,9 @@ app.whenReady().then(() => {
     popup: (kind, text) => hud && hud.show(kind, text),
     peerName: () => (peer.current && peer.current.name) || 'the other computer',
     onChange: pushState,
+    virtual: () => svc.vcam.ready,
   });
+  svc.vcam.check();
   svc.phoneViews.on('change', pushState);
   // A phone notification clicked here: its app in a window.
   svc.notifs.on('click', (m) => peer.current && peer.current.os === P.OS.ANDROID && svc.phoneViews.openNotified(m.app, m.appName));
