@@ -166,6 +166,10 @@ class RemoteActivity : ComponentActivity() {
         val h = WebHost(this, "remote.html", Core.get(this)) { ev, _ ->
             when (ev) {
                 "close" -> finish()
+                // The touchpad's Rotate: sideways and back (the gamepad is always sideways).
+                "rotate" -> requestedOrientation =
+                    if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+                    else ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
                 "keyboard" -> host?.keyboard(true)
                 "keyboardOff" -> host?.keyboard(false)
             }

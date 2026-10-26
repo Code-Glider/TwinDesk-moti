@@ -67,6 +67,8 @@
   };
 
   $('b-close').onclick = () => { releaseAll(); TD.event('close'); };
+  // The touchpad held sideways (or upright again): the activity turns, the page follows.
+  $('b-rotate').onclick = () => TD.event('rotate');
   document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
   window.addEventListener('contextmenu', (e) => e.preventDefault());
 
