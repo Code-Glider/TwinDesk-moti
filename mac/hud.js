@@ -35,9 +35,10 @@ class Hud {
 
   // kind: 'away' (we use the other computer), 'driven' (it uses this Mac), 'home';
   // 'linkOn' / 'linkOff': the big card in the middle of the screen (sharing switched on/off), with `sub`.
+  // 'lock': cursor lock on/off.
   async show(kind, text, sub = '') {
     const big = kind === 'linkOn' || kind === 'linkOff';
-    if (this.getSettings().app.hud === false && !big) return; // the on/off card always shows
+    if (this.getSettings().app.hud === false && !big && kind !== 'lock') return; // the on/off card and the lock always show
     await this._ensure();
     const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
     const [w, h] = big ? [BIG_W, BIG_H] : [W, H];

@@ -17,6 +17,7 @@ UI.tab({
   build(body) {
     const { el, api } = UI;
     const status = UI.note('info', '');
+    const lock = UI.cursorLock();
 
     // A row whose label follows the other computer's name (UI.names fills it on render).
     const peerRow = (label, hint, controls) => {
@@ -45,6 +46,7 @@ UI.tab({
         UI.dir('m2w', [peerRow('Use {me}’s mouse and keyboard on {name}', 'Push the pointer past the edge', [drive]), viaRow]),
         UI.dir('w2m', [driven2 = peerRow('Use {name}’s mouse and keyboard on {me}', '', [driven])]),
       ),
+      lock.el,
       UI.note('info', 'Which device each edge of the screen leads to: Multi-device › Layout.'),
       UI.card('Feel', [
         UI.row('Edge resistance', 'Push a little further to cross', [resistance]),
@@ -61,6 +63,7 @@ UI.tab({
       const [kind, text] = UI.kvmStatus(s);
       status.className = `note ${kind}`;
       status.set(text);
+      lock.update(s);
       driven2.setHint('Double-tap the hotkey to take everything back');
       drive.set(k.driveOther);
       driven.set(k.beDriven);

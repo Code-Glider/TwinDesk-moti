@@ -4,6 +4,7 @@
 
 const { ipcMain, shell, app, screen, dialog, clipboard, Menu } = require('electron');
 const P = require('../../shared/protocol.js');
+const CL = require('../../shared/cursorlock.js');
 const { LINKS } = require('../../shared/about.js');
 const store = require('./store');
 
@@ -36,7 +37,7 @@ const SCHEMA = {
     pcSide: oneOf(P.SIDES, 'right'), mouse: bool, keyboard: bool, driveOther: bool, beDriven: bool,
     resistancePx: (v) => Math.round(clamp(0, 400, 120)(v)), speed: clamp(0.25, 4, 1), reverseScroll: bool, hotkeySwitch: bool, linked: bool, gestures: bool, ble: bool,
   },
-  keys: { swapCtrlCmd: bool, hotkey: oneOf(P.HOTKEYS, 'AltRight') },
+  keys: { swapCtrlCmd: bool, hotkey: oneOf(P.HOTKEYS, 'AltRight'), lockKeys: (v) => CL.validKeys(v, CL.DEFAULT_KEYS.mac) },
   app: { openAtLogin: bool, keepAwake: bool, hud: bool },
   mesh: { autoJoin: bool },
   updates: { auto: bool },
@@ -315,6 +316,7 @@ function setupIpc(ctx) {
       setGroup('kvm', partial);
       ctx.kvm.settingsChanged(prev);
       if (partial && typeof partial.shared === 'boolean') ctx.kvm.setShared(partial.shared); // the Cursor tab's switch (Over Bluetooth through it)
+      if (partial && typeof partial.locked === 'boolean') ctx.kvm.setLocked(partial.locked); // cursor lock: not a setting
     },
     // The shared layout (docs/mesh.md): a device goes to a cell (a device there moves to its old cell, or
     // they swap); a device goes off the map. Invalid arguments are ignored; the new layout comes with the state.

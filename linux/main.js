@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const P = require('../shared/protocol.js');
+const CL = require('../shared/cursorlock.js');
 const store = require('./store');
 const { Discovery, interfaces, isIPv4, ipToInt } = require('./discovery');
 const Link = require('./link');
@@ -242,6 +243,12 @@ function start() {
     if (mode === 'driving') hud.show('away', (kvm.keyboardOnly ? 'Typing on ' : 'Using ') + name);
     else if (mode === 'driven') hud.show('driven', name + ' is using {me}');
     else hud.show('home', 'Back on {me}');
+  };
+  // Cursor lock: the popup goes where the pointer is (the other computer shows its own while we drive it).
+  kvm.onLock = (on, mode) => {
+    if (mode === 'driving' && !(kvm.local && kvm.local.drives())) return;
+    const where = mode === 'driving' ? peerName() : '{me}';
+    hud.show('lock', on ? 'Cursor locked on ' + where : 'Cursor unlocked');
   };
   // Send files and drops show progress in the popup, like the PC.
   const pct = (n, total) => Math.min(99, Math.floor((n / total) * 100));
@@ -1044,7 +1051,7 @@ function updateTray(s) {
   const rtt = connected && s.link.rtt != null ? ' · ' + s.link.rtt + ' ms' : '';
   const host = s.paired && s.paired.macName;
   const again = !connected && host && (s.link.state === 'stopped' || !!s.link.busy);
-  const key = JSON.stringify([name, rtt, again, away, kvm.linked, kvm.paused, sharing, watching, k.driveOther, k.beDriven, settings.clipboard.enabled,
+  const key = JSON.stringify([name, rtt, again, away, kvm.linked, kvm.paused, kvm.locked, kvm.mode, settings.keys.lockKeys, sharing, watching, k.driveOther, k.beDriven, settings.clipboard.enabled,
     settings.audio.send, settings.app.hud, found.map((d) => [d.id, d.name, d.os]), s.updates && s.updates.available && s.updates.latest]);
   if (key === trayKey) return;
   trayKey = key;
@@ -1061,6 +1068,7 @@ function updateTray(s) {
     { label: connected ? 'Connected to ' + name + rtt : 'Not connected', enabled: false },
     ...(away ? [{ label: 'Bring Mouse and Keyboard Back', click: () => kvm.home() }] : []),
     check('Cursor Sharing', kvm.linked && !kvm.paused, (i) => kvm.setShared(i.checked)),
+    ...(connected ? [check('Lock Cursor on ' + (kvm.mode === 'driving' ? other : device.name) + ' (' + CL.keysLabel(settings.keys.lockKeys, 'linux') + ')', kvm.locked, (i) => kvm.setLocked(i.checked))] : []),
     { type: 'separator' },
     check('Share Screen', sharing, (i) => pcScreen.setMode(i.checked ? 'mirror' : 'off')),
     check('Receive Screen', watching, (i) => (i.checked ? screen.open(false) : screen.close())),

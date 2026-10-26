@@ -16,6 +16,7 @@ const { EventEmitter } = require('events');
 const P = require('../../shared/protocol.js');
 const E = require('../../shared/kvm-edges.js');
 const blepipe = require('../../shared/blepipe.js');
+const CL = require('../../shared/cursorlock.js');
 const store = require('./store');
 
 // {them} = the other computer's name (Kvm._them).
@@ -47,6 +48,10 @@ class Kvm extends EventEmitter {
     this.pendingMove = null; // coalesced k.mm while driving
     this.moveTimer = null; // its flush, through Bluetooth
     this.local = null; // phone-bridge.js: drives a phone itself (its input goes through adb, not the link)
+    this.locked = false; // cursor lock (shared/cursorlock.js): the pointer stays on the device it is on
+    this.lockAt = 0;
+    this.lockKey = new CL.LockKey(() => this.getSettings().keys.lockKeys);
+    this.drivenMouse = false; // driven with the mouse too (not keyboard only): the edges are watched
 
     // Message types -> handler(m, fromId). The bus delivers them; onPartnerMessage() replays a phone bridge's.
     const K = [P.T.K_MOVE, P.T.K_DOWN, P.T.K_UP, P.T.K_WHEEL, P.T.K_KEY_DOWN, P.T.K_KEY_UP];
@@ -71,6 +76,9 @@ class Kvm extends EventEmitter {
       },
       [P.T.KVM_NEXT]: (m, from) => this._onNext(m, from), // a device we drive hands the input on (a chain)
       [P.T.K_GESTURE]: (m, from) => this._onGesture(m, from),
+      [P.T.KVM_LOCK]: (m, from) => {
+        if (this.mode !== 'home' && from === this.partner) this.setLocked(m.on === true, false);
+      },
     };
     for (const t of K) this.handlers[t] = (m, from) => this._onK(m, from);
     for (const t of Object.keys(this.handlers)) this.hub.bus.on(t, (m, from) => this.handlers[t](m, from));
@@ -167,7 +175,41 @@ class Kvm extends EventEmitter {
   }
 
   get view() {
-    return { where: this.mode, message: this.message, tapError: this.tapError, paused: this.paused };
+    return { where: this.mode, message: this.message, tapError: this.tapError, paused: this.paused, locked: this.locked };
+  }
+
+  // Cursor lock: at home no edge crosses, driven the edges aren't watched (neither the way back nor on
+  // to another device), driving the partner is told (kvm.lock) and stops watching its own.
+  // tell: no echo of a kvm.lock.
+  setLocked(on, tell = true) {
+    on = !!on;
+    if (on === this.locked || (on && !this.hub.bus.connectedIds().length)) return;
+    this.locked = on;
+    if (tell && this.mode === 'driving') this._drive({ t: P.T.KVM_LOCK, on });
+    else if (tell && this.mode === 'driven' && this.partner) this._send(this.partner, { t: P.T.KVM_LOCK, on });
+    if (this.mode === 'driven' && this.drivenMouse) {
+      if (on) this.helper.send('armReturn', { on: false });
+      else this._armReturn();
+    }
+    this.config();
+    this.emit('lock', on, this.mode); // main.js: the popup
+    this.emit('change');
+  }
+
+  // The lock key (main.js's global shortcut, or the driver's keyboard): a press and its echo count once.
+  toggleLock() {
+    const now = Date.now();
+    if (now - this.lockAt < CL.TOGGLE_GAP_MS) return;
+    this.lockAt = now;
+    this.setLocked(!this.locked);
+  }
+
+  // This device's own lock key, typed on the keyboard of the computer that drives it (ev in our key
+  // codes): used up here, the app in front never gets it.
+  _lockKeyHere(ev) {
+    const hit = this.lockKey.intercept(ev);
+    if (hit === 'press') this.toggleLock();
+    return !!hit;
   }
 
   // Device id -> connected now.
@@ -254,7 +296,7 @@ class Kvm extends EventEmitter {
   // The sides the helper watches: a side whose device is connected, while cursor sharing is on.
   _watchedSides() {
     const k = this.cfg;
-    if (!this.linked || !k.driveOther || !k.mouse) return [];
+    if (!this.linked || !k.driveOther || !k.mouse || (this.locked && this.mode === 'home')) return [];
     const edges = this.edges;
     return E.SIDES.filter((side) => !!edges[side] && this._connectedTo(edges[side]) && !this._pausedFor(edges[side]));
   }
@@ -314,6 +356,7 @@ class Kvm extends EventEmitter {
       if (this.mode === 'driving') this.goHome(this._them('{them} disconnected', id));
       else this._drivenHome(this._them('{them} disconnected', id));
     }
+    if (this.locked && !this.hub.bus.connectedIds().length) this.locked = false;
     this.config();
   }
 
@@ -327,6 +370,11 @@ class Kvm extends EventEmitter {
     const prev = this.mode;
     if (prev !== mode) console.log(`[kvm] ${prev} -> ${mode}${message ? ` (${message})` : ''}`);
     this.mode = mode;
+    if (prev !== mode && this.locked) { // moved by the hotkey, the menu bar or a disconnect: the lock was for where it was
+      this.locked = false;
+      if (prev === 'home') this.config();
+    }
+    if (prev !== mode) this.lockKey.reset();
     if (mode === 'home') this.partner = null;
     if (prev !== mode) this.emit('where', mode, prev); // hud.js shows it
     this.message = message || '';
@@ -474,6 +522,7 @@ class Kvm extends EventEmitter {
       case 'ev': {
         if (this.mode !== 'driving' || !ev.ev) return;
         const e = ev.ev;
+        if (this.local && this.local.drives(this.partner) && this._lockKeyHere(e)) return; // a phone has no lock key: ours counts there
         if (this.fileClip && this.fileClip.intercept(e)) return; // copy/paste shortcut: done over there
         if (e.t === P.T.K_MOVE) {
           if (!this.pendingMove) {
@@ -493,7 +542,7 @@ class Kvm extends EventEmitter {
         if (this.mode === 'driving') this.goHome(ev.reason === 'deadman' ? 'Input came back by itself (safety timeout)' : '');
         break;
       case 'return':
-        if (this.mode === 'driven') this._onReturn(ev);
+        if (this.mode === 'driven' && !this.locked) this._onReturn(ev);
         break;
     }
   }
@@ -503,7 +552,7 @@ class Kvm extends EventEmitter {
     // The one-to-one helper (macshare-helper-multi not built) says no side: it watches the first one we sent.
     const side = E.SIDES.includes(ev.side) ? ev.side : this._watchedSides()[0] || null;
     const id = side ? this.edges[side] : null;
-    if (this.mode !== 'home' || !id || !this._canDriveTo(id) || !this.cfg.mouse || (this.blockEdge && this.blockEdge())) {
+    if (this.mode !== 'home' || this.locked || !id || !this._canDriveTo(id) || !this.cfg.mouse || (this.blockEdge && this.blockEdge())) {
       // The helper already captures (it started at the edge); undo that if we can't cross.
       this.helper.send('capture', { on: false });
       if (!this.hub.bus.connectedIds().length) this._setMode('home', 'Nothing connected');
@@ -532,10 +581,11 @@ class Kvm extends EventEmitter {
     this._setMode('driven', '');
     this._send(from, { t: P.T.KVM_ACCEPT, route: m.route });
     if (first) this.input.releaseAll();
+    this.drivenMouse = m.mouse !== false;
     if (m.mouse !== false) {
       if (typeof m.side === 'string') this.helper.send('place', { side: m.side, offset: Number(m.offset) || 0.5 });
       else if (first) this.helper.send('place', { center: true });
-      this._armReturn();
+      if (!this.locked) this._armReturn();
     }
     this.drop.dragIn.onDriven(); // after 'place': the native drag starts where the pointer came in
   }
@@ -570,7 +620,7 @@ class Kvm extends EventEmitter {
   // phone (it ends a chain). We release the device and take `to`, as an edge crossing would: the device it
   // reached sees the input come in through the side opposite to the one it left by.
   _onNext(m, from) {
-    if (this.mode !== 'driving' || from !== this.partner || m.route !== this.route || this.keyboardOnly) return;
+    if (this.mode !== 'driving' || from !== this.partner || m.route !== this.route || this.keyboardOnly || this.locked) return;
     if (this._peerOs(from) === P.OS.ANDROID) return; // a phone has no edges of its own: it ends a chain
     const side = E.SIDES.includes(m.side) ? m.side : null;
     const to = typeof m.to === 'string' ? m.to : '';
@@ -610,6 +660,7 @@ class Kvm extends EventEmitter {
           return;
         }
         ev = { t: m.t, code: this._swapKeys(from) ? P.mapKeyFromOtherPlatform(m.code) : m.code };
+        if (this._lockKeyHere(ev)) return;
     }
     this.helper.send('inject', { ev });
   }

@@ -1,6 +1,6 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
 // Main process: lifecycle, windows, tray, IPC and the state pushed to the main window.
-const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, Notification, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, Notification, shell, globalShortcut } = require('electron');
 const { Updates } = require('../shared/updates.js');
 const { aboutInfo } = require('../shared/about.js');
 const { execFile } = require('child_process');
@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const P = require('../shared/protocol.js');
+const CL = require('../shared/cursorlock.js');
 const store = require('./store');
 const { Discovery, interfaces, isIPv4, ipToInt } = require('./discovery');
 const Link = require('./link');
@@ -120,6 +121,7 @@ let notifs = null;
 let fileClip = null;
 let sshd = null;
 let kvm = null;
+let lockKey = null; // the cursor lock key at home (shared/cursorlock.js)
 let wired = null; // wired.js, with the phone
 let hostServer = null; // server.js, once the certificate exists
 let phone = null; // A phone as the peer: phone.js (its .bridge: phone-bridge.js)
@@ -237,6 +239,15 @@ function start() {
     else if (mode === 'driven') hud.show('driven', name + ' is using {me}');
     else hud.show('home', 'Back on {me}');
   };
+  // Cursor lock: the popup goes where the pointer is (the other computer shows its own while we drive it).
+  kvm.onLock = (on, mode) => {
+    if (mode === 'driving' && !(kvm.local && kvm.local.drives())) return;
+    const where = mode === 'driving' ? peerName() : '{me}';
+    hud.show('lock', on ? 'Cursor locked on ' + where : 'Cursor unlocked');
+  };
+  // The lock key at home: a global shortcut, held while connected (pushState syncs it).
+  lockKey = new CL.GlobalLockKey(globalShortcut, () => kvm.toggleLock());
+
   vdd = new Vdd({ helper, onChange: pushState });
   // Notifications both ways, Send files, copy/paste files with shortcuts
   notifs = new Notifs({ link, helper, settings, save: saveSettings, selfIds: [AUMID, 'org.macshare.windows'], peerName, onChange: pushState });
@@ -727,6 +738,10 @@ function pushState() {
     pushQueued = false;
     const s = buildState();
     s.inviting = phoneInviteView(s);
+    if (lockKey) {
+      lockKey.sync(kvm.connected ? settings.keys.lockKeys : '');
+      s.kvmState.lockError = lockKey.error;
+    }
     if (pcScreen) pcScreen.sendState(); // The viewer learns what we share
     if (sendTo) sendTo.sync(s.peer && s.peer.name);
     if (pairSync) pairSync.check(); // Tell the other computer what changed here // the Send to entry follows the peer's name
@@ -992,7 +1007,7 @@ function updateTray(s = buildState()) {
   const watching = screen.sentAccept === true;
   const host = s.paired && s.paired.macName;
   const again = !connected && host && (s.link.state === 'stopped' || !!s.link.busy);
-  const key = JSON.stringify([name, rtt, again, away, kvm.linked, kvm.paused, sharing, watching, k.driveOther, k.beDriven, settings.clipboard.enabled,
+  const key = JSON.stringify([name, rtt, again, away, kvm.linked, kvm.paused, kvm.locked, kvm.mode, settings.keys.lockKeys, sharing, watching, k.driveOther, k.beDriven, settings.clipboard.enabled,
     settings.audio.send, settings.app.hud, found.map((d) => [d.id, d.name, d.os]), s.updates && s.updates.available && s.updates.latest]);
   if (key === trayKey) return;
   trayKey = key;
@@ -1009,6 +1024,7 @@ function updateTray(s = buildState()) {
     { label: connected ? 'Connected to ' + name + rtt : 'Not connected', enabled: false },
     ...(away ? [{ label: 'Bring Mouse and Keyboard Back', click: () => kvm.home() }] : []),
     check('Cursor Sharing', kvm.linked && !kvm.paused, (i) => kvm.setShared(i.checked)),
+    ...(connected ? [check('Lock Cursor on ' + (kvm.mode === 'driving' ? other : device.name) + ' (' + CL.keysLabel(settings.keys.lockKeys, 'win') + ')', kvm.locked, (i) => kvm.setLocked(i.checked))] : []),
     { type: 'separator' },
     check('Share Screen', sharing, (i) => pcScreen.setMode(i.checked ? 'mirror' : 'off')),
     // Opens/closes the screen window (opening starts the other computer's sharing).

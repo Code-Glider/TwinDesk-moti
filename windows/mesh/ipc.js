@@ -87,7 +87,8 @@ function setupIpc(ctx) {
   handle('setKvm', (partial) => {
     if (partial && typeof partial.linked === 'boolean') kvm.setLinked(partial.linked); // home first, tells the other side
     if (partial && typeof partial.shared === 'boolean') kvm.setShared(partial.shared); // the Cursor tab's switch (Over Bluetooth through it)
-    const { linked, edges, shared, ...rest } = partial && typeof partial === 'object' ? partial : {}; // edges: setEdge only
+    if (partial && typeof partial.locked === 'boolean') kvm.setLocked(partial.locked); // cursor lock: not a setting
+    const { linked, edges, shared, locked, ...rest } = partial && typeof partial === 'object' ? partial : {}; // edges: setEdge only
     change('kvm', rest, () => kvm.applyConfig());
   });
   // Dev only (windows/test/dev/e2e-app.js, MACSHARE_DEV_PORT set): a helper event, as if the helper

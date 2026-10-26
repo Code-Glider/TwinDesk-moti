@@ -478,7 +478,7 @@ static void flush_hotkey(void) {
 
 static void on_key(int ev, int down) {
   if (ev < 0 || ev > 255) return;
-  shortcut_key(ev, down, !capturing);
+  shortcut_key(ev, down, !capturing, !(capturing && capKeys));
   int hot = detect_hotkey(ev, down);
   if (!down && swallowKeys[ev]) { swallowKeys[ev] = 0; release_grabs(); if (hot) fire_hotkey(); return; }
   if (capturing && capKeys) {

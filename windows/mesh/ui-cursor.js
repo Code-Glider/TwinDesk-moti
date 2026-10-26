@@ -41,9 +41,11 @@ UI.tab({
     );
 
     const status = UI.inputStatus();
+    const lock = UI.cursorLock();
 
     body.append(
       pair.el,
+      lock.el,
       UI.card('Feel', [gestureRow]),
       UI.card('Not on the same network', [bleRow]),
       UI.card('Right now', [status], { cls: 'keep-on' }),
@@ -55,6 +57,7 @@ UI.tab({
       viaRow.hidden = !UI.peer(s).phone;
       via.set(((s.phone || {}).bridge || {}).input || (((s.phone || {}).settings || {}).input === 'phone' ? 'phone' : 'adb'));
       status.update(s);
+      lock.update(s);
       speed.set(s.kvm.speed);
       reverse.set(s.kvm.reverseScroll);
       gestures.set(s.kvm.gestures !== false);

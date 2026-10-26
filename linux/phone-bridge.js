@@ -498,6 +498,7 @@ class PhoneBridge extends EventEmitter {
       case T.K_WHEEL: return this._wheel(m);
       case T.K_KEY_DOWN: case T.K_KEY_UP: return this._key(m);
       case T.K_GESTURE: return this._gesture(m);
+      case T.KVM_LOCK: if (this.kvm) this.kvm.locked = m.on === true; return; // cursor lock: the way back isn't taken
       default: break;
     }
   }
@@ -605,7 +606,7 @@ class PhoneBridge extends EventEmitter {
     const back = { left: [dx, k.x <= 0, -1], right: [dx, k.x >= d.w - 1, 1], top: [dy, k.y <= 0, -1], bottom: [dy, k.y >= d.h - 1, 1] }[k.side];
     if (back && back[1] && Math.sign(back[0]) === back[2]) {
       k.push += Math.abs(back[0]);
-      if (k.push > Math.max(8, (cfg.resistancePx ?? P.RESISTANCE_PX) / 3)) {
+      if (k.push > Math.max(8, (cfg.resistancePx ?? P.RESISTANCE_PX) / 3) && !k.locked) {
         return this._goHome();
       }
     } else k.push = 0;

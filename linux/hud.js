@@ -33,10 +33,10 @@ class Hud {
   }
 
   // kind: 'away' (we use the other computer), 'driven' (it uses this computer), 'home';
-  // 'linkOn' / 'linkOff': the big card in the middle of the screen, with `sub`.
+  // 'linkOn' / 'linkOff': the big card in the middle of the screen, with `sub`. 'lock': cursor lock on/off.
   async show(kind, text, sub = '') {
     const big = kind === 'linkOn' || kind === 'linkOff';
-    if (this.getSettings().app.hud === false && !big) return; // the on/off card always shows
+    if (this.getSettings().app.hud === false && !big && kind !== 'lock') return; // the on/off card and the lock always show
     await this._ensure();
     if (this.win.isDestroyed()) return;
     const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;

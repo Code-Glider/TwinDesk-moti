@@ -415,7 +415,7 @@ static void flush_hotkey(void) {
 // value: 1 down, 0 up, 2 autorepeat (sent as another k.kd, like the PC)
 static void on_key(int ev, int value) {
   if (ev < 0 || ev > 255) return;
-  if (value != 2) { localKeys[ev] = (unsigned char)value; shortcut_key(ev, value, !capturing); }
+  if (value != 2) { localKeys[ev] = (unsigned char)value; shortcut_key(ev, value, !capturing, !(capturing && capKeys)); }
   int hot = value == 2 ? 0 : detect_hotkey(ev, value);
   if (capturing && capKeys) {
     if (is_hotkey(ev)) {

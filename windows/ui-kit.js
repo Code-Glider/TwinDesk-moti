@@ -376,12 +376,12 @@ const UI = {
 
   // "Control+Alt+C" → "Ctrl+Alt+C" (Electron accelerator → how Windows writes it).
   keysLabel(acc) {
-    return String(acc || '').split('+').map((p) => ({ Control: 'Ctrl', Super: 'Win' }[p] || p)).join('+');
+    return String(acc || '').split('+').map((p) => ({ Control: 'Ctrl', Super: 'Win', Scrolllock: 'Scroll Lock' }[p] || p)).join('+');
   },
 
   // A shortcut recorder: click, press the keys (with Ctrl, Alt or Win), Esc cancels.
-  // onChange(accelerator).
-  keyRecorder(onChange) {
+  // onChange(accelerator). opts.bare: Scroll Lock and F13–F24 also count on their own.
+  keyRecorder(onChange, opts = {}) {
     const b = UI.el('button', { class: 'btn small keyrec' });
     let value = '', recording = false;
     const show = () => { b.textContent = recording ? 'Press keys…' : UI.keysLabel(value) || 'None'; b.classList.toggle('on', recording); };
@@ -389,14 +389,16 @@ const UI = {
       if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3);
       if (/^Digit\d$/.test(e.code)) return e.code.slice(5);
       if (/^F\d{1,2}$/.test(e.code)) return e.code;
+      if (opts.bare && e.code === 'ScrollLock') return 'Scrolllock';
       return { Space: 'Space', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete', Enter: 'Enter', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right' }[e.code] || '';
     };
+    const bare = (key) => opts.bare && /^(?:Scrolllock|F(?:1[3-9]|2[0-4]))$/.test(key);
     const onKey = (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (e.key === 'Escape') return stop();
       const key = keyOf(e);
-      if (!key || !(e.ctrlKey || e.altKey || e.metaKey)) return; // wait for a real combination
+      if (!key || !(e.ctrlKey || e.altKey || e.metaKey || bare(key))) return; // wait for a real combination
       value = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super', key].filter(Boolean).join('+');
       stop();
       onChange(value);
@@ -420,6 +422,31 @@ const UI = {
     return UI.P.hotkeyName((s && s.keys && s.keys.hotkey) || 'AltRight', 'win');
   },
 
+  // Cursor tab › Cursor lock (shared/cursorlock.js): the switch is not a setting, it lasts until the
+  // pointer is moved some other way; the lock key is (settings.keys.lockKeys).
+  cursorLock() {
+    const lock = UI.switch((v) => UI.api.setKvm({ locked: v }), { label: 'Lock the cursor' });
+    const lockRow = UI.row('Lock the cursor', '', [lock]);
+    const key = UI.keyRecorder((v) => UI.api.setKeys({ lockKeys: v }), { bare: true });
+    const keyRow = UI.row('Lock key', 'Scroll Lock or F13–F24 on its own, or a combination with Ctrl, Alt or Win', [key.el]);
+    return {
+      el: UI.card('Cursor lock', [lockRow, keyRow]),
+      update(s) {
+        const k = s.kvmState;
+        const connected = s.link.state === 'connected';
+        const p = UI.peer(s);
+        lock.set(k.locked);
+        lock.disable(!connected);
+        key.set(s.keys.lockKeys);
+        const where = k.mode === 'driving' ? p.name : p.me;
+        const press = s.keys.lockKeys ? ' While the pointer is on ' + p.me + ', ' + UI.keysLabel(s.keys.lockKeys) + ' on either keyboard locks or unlocks it (each computer has its own key).' : '';
+        lockRow.setHint(k.lockError ? k.lockError : !connected ? 'Keeps the pointer on one computer, even when the mouse is plugged into another.' + press
+          : k.locked ? 'The pointer stays on ' + where + ': the screen edges don’t cross.' + press
+            : 'Keeps the pointer on ' + where + ', where it is now, even when the mouse is plugged into another computer.' + press);
+      },
+    };
+  },
+
   // "Right now" row for the Cursor/Keyboard tabs: where input is + the last KVM event.
   inputStatus() {
     const pill = UI.el('span', { class: 'pill' });
@@ -429,7 +456,7 @@ const UI = {
       const p = UI.peer(s);
       const WHERE = { home: 'On ' + p.me, driving: 'On ' + p.name, driven: p.Name + ' is using ' + p.me };
       const off = k.linked === false || k.paused;
-      pill.textContent = off ? 'Sharing off' : WHERE[k.mode] || WHERE.home;
+      pill.textContent = off ? 'Sharing off' : (k.locked ? 'Locked · ' : '') + (WHERE[k.mode] || WHERE.home);
       pill.className = 'pill ' + (off ? 'bad' : k.mode === 'home' ? 'muted' : 'good');
       row.setHint(k.helper && k.helper !== 'starting' ? k.helper
         : k.linked === false ? 'Cursor sharing is off. Double-tap ' + UI.hotkeyName(s) + ' to turn it on.'

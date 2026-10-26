@@ -1,18 +1,19 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
-// The copy/paste-files shortcuts at home (linux/fclip.js), for both backends: Electron's
-// globalShortcut needs X11 and an X window in front, so the helper, which reads every key anyway
-// (the hotkey), watches for them. The keys still reach the app in front (nothing is grabbed);
-// once the combination is complete we wait for every key to come up (or 1.5 s), then tell main
-// `shortcut {action}`, so whatever main sends the app next (Ctrl+C in the file manager) arrives
+// The copy/paste-files shortcuts at home (linux/fclip.js) and the cursor lock key (shared/cursorlock.js),
+// for both backends: Electron's globalShortcut needs X11 and an X window in front, so the helper, which
+// reads every key anyway (the hotkey), watches for them. The keys still reach the app in front (nothing
+// is grabbed); once the combination is complete we wait for every key to come up (or 1.5 s), then tell
+// main `shortcut {action}`, so whatever main sends the app next (Ctrl+C in the file manager) arrives
 // with no modifier still held.
 #include "helper.h"
 #include <stdio.h>
 #include <string.h>
 
 enum { M_CTRL = 1, M_ALT = 2, M_SHIFT = 4, M_SUPER = 8 };
+enum { C_COPY, C_PASTE, C_LOCK, C_COUNT };
 
 typedef struct { int mods, key; const char *action; } Combo;
-static Combo combos[2] = { { 0, -1, "copy" }, { 0, -1, "paste" } };
+static Combo combos[C_COUNT] = { { 0, -1, "copy" }, { 0, -1, "paste" }, { 0, -1, "lock" } };
 static int on;
 static unsigned char held[256];
 static int pending = -1;
@@ -29,7 +30,8 @@ static int mod_of(int ev) {
 }
 
 // "Control+Alt+C" (an Electron accelerator, settings.files.copyKeys) → mods + evdev key.
-static void parse(Combo *c, const char *acc) {
+// bare: a key on its own is allowed (the lock key: main lets only Scroll Lock and F13–F24 through).
+static void parse(Combo *c, const char *acc, int bare) {
   c->mods = 0;
   c->key = -1;
   char buf[64];
@@ -45,30 +47,34 @@ static void parse(Combo *c, const char *acc) {
       if (strlen(p) == 1 && p[0] >= 'A' && p[0] <= 'Z') snprintf(code, sizeof code, "Key%c", p[0]);
       else if (strlen(p) == 1 && p[0] >= 'a' && p[0] <= 'z') snprintf(code, sizeof code, "Key%c", p[0] - 32);
       else if (strlen(p) == 1 && p[0] >= '0' && p[0] <= '9') snprintf(code, sizeof code, "Digit%c", p[0]);
+      else if (!strcmp(p, "Scrolllock")) snprintf(code, sizeof code, "ScrollLock");
       else snprintf(code, sizeof code, "%s", p);
       c->key = key_evdev(code);
     }
   }
-  if (!c->mods) c->key = -1; // a bare key would fire while typing
+  if (!c->mods && !bare) c->key = -1; // a bare key would fire while typing
 }
 
-// kvmConfig: shortcuts (on/off), copyKeys, pasteKeys.
+// kvmConfig: shortcuts (on/off), copyKeys, pasteKeys; lockKeys ('' = no lock key).
 void shortcut_config(const JObj *c) {
   on = jbool(c, "shortcuts", 0);
-  parse(&combos[0], jstr(c, "copyKeys", "Control+Alt+C"));
-  parse(&combos[1], jstr(c, "pasteKeys", "Control+Alt+V"));
-  if (!on) pending = -1;
+  parse(&combos[C_COPY], jstr(c, "copyKeys", "Control+Alt+C"), 0);
+  parse(&combos[C_PASTE], jstr(c, "pasteKeys", "Control+Alt+V"), 0);
+  parse(&combos[C_LOCK], jstr(c, "lockKeys", ""), 1);
+  if (pending >= 0 && (pending == C_LOCK ? combos[C_LOCK].key < 0 : !on)) pending = -1;
 }
 
 // Every local key (not our own injection). detect: we're at home (while capturing, main's
-// fclip.intercept sees the keys instead).
-void shortcut_key(int ev, int down, int detect) {
+// fclip.intercept sees the keys instead). detectLock: the same for the lock key, which is also ours
+// while capturing only the mouse (the keys stay here, main never sees them).
+void shortcut_key(int ev, int down, int detect, int detectLock) {
   if (ev < 0 || ev > 255) return;
   held[ev] = (unsigned char)(down != 0);
-  if (!down || !detect || !on || mod_of(ev)) return;
+  if (!down || mod_of(ev)) return;
   int mods = 0;
   for (int i = 0; i < 256; i++) if (held[i]) mods |= mod_of(i);
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < C_COUNT; i++) {
+    if (i == C_LOCK ? !detectLock : !(detect && on)) continue;
     if (combos[i].key == ev && combos[i].mods == mods) {
       pending = i;
       pendingAt = now_ms();

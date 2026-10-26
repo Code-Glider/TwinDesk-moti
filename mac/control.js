@@ -288,12 +288,13 @@ const UI = {
 
   // "Control+Alt+C" -> "⌃⌥C".
   keysLabel(acc) {
-    const sym = { Control: '⌃', Alt: '⌥', Shift: '⇧', Command: '⌘' };
+    const sym = { Control: '⌃', Alt: '⌥', Shift: '⇧', Command: '⌘', Scrolllock: 'Scroll Lock' };
     return String(acc || '').split('+').map((p) => sym[p] || p).join('');
   },
 
   // A shortcut recorder: click, press the keys (with ⌃, ⌥ or ⌘), Esc cancels. onChange(accelerator).
-  keyRecorder(onChange) {
+  // opts.bare: F13–F24 also count on their own (a PC keyboard's Scroll Lock is F14 here).
+  keyRecorder(onChange, opts = {}) {
     const b = UI.el('button', { class: 'btn small keyrec' });
     let value = '', recording = false;
     const show = () => { b.textContent = recording ? 'Press keys…' : UI.keysLabel(value) || 'None'; b.classList.toggle('on', recording); };
@@ -308,7 +309,8 @@ const UI = {
       e.stopPropagation();
       if (e.key === 'Escape') return stop();
       const key = keyOf(e);
-      if (!key || !(e.ctrlKey || e.altKey || e.metaKey)) return; // wait for a real combination
+      const bare = opts.bare && /^F(?:1[3-9]|2[0-4])$/.test(key);
+      if (!key || !(e.ctrlKey || e.altKey || e.metaKey || bare)) return; // wait for a real combination
       const acc = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Command', key].filter(Boolean).join('+');
       value = acc;
       stop();
@@ -324,6 +326,31 @@ const UI = {
     b.onblur = stop;
     show();
     return { el: b, set(v) { if (!recording) { value = v || ''; show(); } } };
+  },
+
+  // Cursor tab › Cursor lock (shared/cursorlock.js): the switch is not a setting, it lasts until the
+  // pointer is moved some other way; the lock key is (settings.keys.lockKeys).
+  cursorLock() {
+    const lock = UI.switch((v) => UI.api.setKvm({ locked: v }), { label: 'Lock the cursor' });
+    const lockRow = UI.row('Lock the cursor', '', [lock]);
+    const key = UI.keyRecorder((v) => UI.api.setKeys({ lockKeys: v }), { bare: true });
+    const keyRow = UI.row('Lock key', 'F13–F24 on its own (a PC keyboard’s Scroll Lock is F14), or a combination with ⌃, ⌥ or ⌘', [key.el]);
+    return {
+      el: UI.card('Cursor lock', [lockRow, keyRow]),
+      update(s) {
+        const i = s.input || {};
+        const keys = (s.keys && s.keys.lockKeys) || '';
+        const p = UI.peer(s);
+        lock.set(i.locked);
+        lock.disable(!s.client);
+        key.set(keys);
+        const where = i.where === 'driving' ? p.name : p.me;
+        const press = keys ? ` While the pointer is on ${p.me}, ${UI.keysLabel(keys)} on either keyboard locks or unlocks it (each computer has its own key).` : '';
+        lockRow.setHint(i.lockError ? i.lockError : !s.client ? `Keeps the pointer on one computer, even when the mouse is plugged into another.${press}`
+          : i.locked ? `The pointer stays on ${where}: the screen edges don’t cross.${press}`
+            : `Keeps the pointer on ${where}, where it is now, even when the mouse is plugged into another computer.${press}`);
+      },
+    };
   },
 
   // The hotkey choices (settings.keys.hotkey), all right-hand modifiers.

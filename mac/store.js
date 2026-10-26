@@ -62,7 +62,9 @@ const DEFAULT_SETTINGS = {
     ble: true, // cursor sharing while the session runs through Bluetooth (synced per pair)
     hotkeySwitch: false, // keyboard only (mouse off): double-tap the hotkey to move the keyboard over and back
   },
-  keys: { swapCtrlCmd: true, hotkey: 'AltRight' }, // swap: keys from the PC, Ctrl -> Cmd, Win -> Control. hotkey: double-tap = everything home
+  // swap: keys from the PC, Ctrl -> Cmd, Win -> Control. hotkey: double-tap = everything home. lockKeys: cursor lock
+  // on/off (shared/cursorlock.js): F14, where a PC keyboard's Scroll Lock lands on a Mac
+  keys: { swapCtrlCmd: true, hotkey: 'AltRight', lockKeys: 'F14' },
   clipboard: {
     enabled: true,
     send: true, // this Mac -> PC

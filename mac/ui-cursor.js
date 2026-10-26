@@ -16,6 +16,7 @@ UI.tab({
   build(body) {
     const { el, api } = UI;
     const status = UI.note('info', '');
+    const lock = UI.cursorLock();
 
     // Layout picker: the Mac in the middle, a slot on each side for the PC.
     const slots = {};
@@ -60,6 +61,7 @@ UI.tab({
         UI.dir('m2w', [peerRow('Use {me}’s mouse and keyboard on {name}', 'Push the pointer past the edge', [drive]), viaRow]),
         UI.dir('w2m', [driven2 = peerRow('Use {name}’s mouse and keyboard on {me}', '', [driven])]),
       ),
+      lock.el,
       UI.card('Where the other computer is', [el('div', { class: 'layout' }, [grid, layoutHint])]),
       UI.card('Feel', [
         UI.row('Edge resistance', 'Push a little further to cross', [resistance]),
@@ -77,6 +79,7 @@ UI.tab({
       const [kind, text] = UI.kvmStatus(s);
       status.className = `note ${kind}`;
       status.set(text);
+      lock.update(s);
       for (const [side, b] of Object.entries(slots)) {
         b.classList.toggle('on', k.pcSide === side);
         b.textContent = k.pcSide === side ? p.name : '';

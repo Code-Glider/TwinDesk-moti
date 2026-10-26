@@ -39,7 +39,7 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, Tray, Menu, nativeImage, systemPreferences, Notification, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, systemPreferences, Notification, dialog, globalShortcut } = require('electron');
 
 // ../main.js has set the command-line switches (WebRTC, autoplay) and the user data folder before handing over.
 if (!app.requestSingleInstanceLock()) {
@@ -48,6 +48,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const P = require('../../shared/protocol.js');
+const CL = require('../../shared/cursorlock.js');
 const store = require('./store');
 const identity = require('../identity');
 const { Discovery, interfaces } = require('../discovery');
@@ -79,6 +80,7 @@ const { aboutInfo } = require('../../shared/about.js');
 
 let win = null;
 let tray = null;
+let lockKey = null; // the cursor lock key at home (shared/cursorlock.js)
 let hud = null;
 let quitting = false;
 let startHidden = process.argv.includes('--hidden');
@@ -222,6 +224,10 @@ function publishState() {
     state.mesh = settings.mesh;
     state.app = settings.app;
     if (kvm) state.input = kvm.view;
+    if (kvm && lockKey) {
+      lockKey.sync(kvm.hub.bus.connectedIds().length > 0 ? settings.keys.lockKeys : '');
+      state.input.lockError = lockKey.error;
+    }
     if (svc) state.terminal = { ...settings.terminal, ...svc.terminal.view, toPc: svc.sshClient.view };
     if (svc) state.files = { ...settings.files, ...svc.drop.view, ...svc.fileSend.view, clip: svc.fileClip.view };
     if (svc) state.notifs = { ...settings.notifs, ...svc.notifs.view };
@@ -420,6 +426,7 @@ function updateTray() {
       ...(where === 'driving' || where === 'driven'
         ? [{ label: 'Bring Mouse and Keyboard Back', click: () => svc.kvm.home() }] : []),
       check('Cursor Sharing', k.linked !== false, (i) => actions.setKvm({ linked: i.checked })),
+      ...(c ? [check(`Lock Cursor on ${where === 'driving' ? name : id.macName} (${CL.keysLabel(settings.keys.lockKeys, 'mac')})`, svc && svc.kvm.locked, (i) => svc.kvm.setLocked(i.checked))] : []),
       { type: 'separator' },
       check('Share Screen', settings.sharing.on, (i) => actions.setSharing(i.checked)),
       check('Receive Screen', svc && svc.pcView.isOpen, (i) => (i.checked ? actions.showPcView() : actions.closePcView())),
@@ -613,6 +620,15 @@ app.whenReady().then(() => {
     else if (mode === 'driven') hud.show('driven', `${name} is using ${id.macName}`);
     else hud.show('home', `Back on ${id.macName}`);
   });
+  // Cursor lock: the popup goes where the pointer is (the other computer shows its own while we drive it).
+  svc.kvm.on('lock', (on, mode) => {
+    if (mode === 'driving' && !(svc.kvm.local && svc.kvm.local.drives(svc.kvm.partner))) return;
+    const where = mode === 'driving' ? (peer.current ? peer.current.name : 'the other computer') : id.macName;
+    hud.show('lock', on ? `Cursor locked on ${where}` : 'Cursor unlocked');
+  });
+  // The lock key at home: a global shortcut, held while connected (pushState syncs it).
+  lockKey = new CL.GlobalLockKey(globalShortcut, () => svc.kvm.toggleLock());
+
   svc.fileClip.on('popup', (kind, text) => hud.show(kind, text));
   svc.pcApps.on('popup', (kind, text) => hud.show(kind, text));
   if (app.isPackaged) app.setAsDefaultProtocolClient('macshare');
@@ -813,7 +829,6 @@ app.on('second-instance', showWindow);
 app.on('activate', showWindow);
 app.on('window-all-closed', () => {}); // keep running in the menu bar
 app.on('will-quit', () => {
-  const { globalShortcut } = require('electron');
   globalShortcut.unregisterAll();
 });
 app.on('before-quit', () => {

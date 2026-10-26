@@ -53,9 +53,11 @@ UI.tab({
     }
     const layoutHint = el('div', { class: 'layout-hint' });
     const status = UI.inputStatus();
+    const lock = UI.cursorLock();
 
     body.append(
       pair.el,
+      lock.el,
       UI.card('Feel', [gestureRow]),
       UI.card('Not on the same network', [bleRow]),
       UI.card('Right now', [status], { cls: 'keep-on' }),
@@ -72,6 +74,7 @@ UI.tab({
       gestures.set(k.gestures !== false);
       resistance.set(k.resistancePx);
       ble.set(k.ble !== false);
+      lock.update(s);
       viaRow.hidden = !UI.peer(s).phone;
       via.set(((s.phone || {}).bridge || {}).input || (((s.phone || {}).settings || {}).input === 'phone' ? 'phone' : 'adb'));
       const p = UI.peer(s);

@@ -98,13 +98,15 @@ class FileClip extends EventEmitter {
 
   // (Re)register the two shortcuts from settings.files.copyKeys / pasteKeys.
   apply() {
-    globalShortcut.unregisterAll();
+    for (const acc of this.registered || []) globalShortcut.unregister(acc); // only ours: the cursor lock key is one too
+    this.registered = [];
     this.error = '';
     if (this.cfg.shortcuts !== false) {
       const bad = [];
       for (const [acc, fn] of [[this.cfg.copyKeys, () => this.copy()], [this.cfg.pasteKeys, () => this.paste()]]) {
         try {
           if (!acc || !globalShortcut.register(acc, fn)) bad.push(acc);
+          else this.registered.push(acc);
         } catch {
           bad.push(acc);
         }

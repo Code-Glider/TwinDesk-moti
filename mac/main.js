@@ -35,7 +35,7 @@
 'use strict';
 
 const path = require('path');
-const { app, BrowserWindow, Tray, Menu, nativeImage, systemPreferences, Notification, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, systemPreferences, Notification, dialog, globalShortcut } = require('electron');
 
 app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns');
 // The hidden capture window plays system audio into WebRTC without any user gesture.
@@ -57,6 +57,7 @@ if (!app.requestSingleInstanceLock()) {
 const P = require('../shared/protocol.js');
 const { CamShare } = require('../shared/camshare.js');
 const { NowPlaying } = require('../shared/nowplaying.js');
+const CL = require('../shared/cursorlock.js');
 const store = require('./store');
 const identity = require('./identity');
 const { Discovery, interfaces } = require('./discovery');
@@ -82,6 +83,7 @@ const { aboutInfo } = require('../shared/about.js');
 
 let win = null;
 let tray = null;
+let lockKey = null; // the cursor lock key at home (shared/cursorlock.js)
 let hud = null;
 let quitting = false;
 let startHidden = process.argv.includes('--hidden');
@@ -215,6 +217,10 @@ function pushState() {
     state.ui = settings.ui;
     state.app = settings.app;
     if (kvm) state.input = kvm.view;
+    if (kvm && lockKey) {
+      lockKey.sync(kvm.server.current ? settings.keys.lockKeys : '');
+      state.input.lockError = lockKey.error;
+    }
     if (svc) state.terminal = { ...settings.terminal, ...svc.terminal.view, toPc: svc.sshClient.view };
     if (svc) state.files = { ...settings.files, ...svc.drop.view, ...svc.fileSend.view, clip: svc.fileClip.view };
     if (svc) state.notifs = { ...settings.notifs, ...svc.notifs.view };
@@ -409,7 +415,7 @@ function updateTray() {
   const OS = { mac: 'Mac', linux: 'Linux', android: 'Phone' };
   const g = (svc && link && link.view()) || { status: {}, hosts: [] };
   const again = !c && g.hosts.length && (g.status.state === 'stopped' || !!g.status.busy);
-  const key = JSON.stringify([c && c.name, c && c.transport, phone, again, where, k.linked, k.ble, k.driveOther, k.beDriven, settings.sharing.on,
+  const key = JSON.stringify([c && c.name, c && c.transport, phone, again, where, k.linked, k.ble, svc && svc.kvm.locked, settings.keys.lockKeys, k.driveOther, k.beDriven, settings.sharing.on,
     !!(svc && svc.pcView.isOpen), phoneView, settings.clipboard.enabled, settings.audio.send, settings.app.hud,
     found.map((d) => [d.id, d.name, d.os]), updates && updates.status.available && updates.status.latest]);
   if (key === trayKey) return;
@@ -422,6 +428,7 @@ function updateTray() {
       ...(where === 'driving' || where === 'driven'
         ? [{ label: 'Bring Mouse and Keyboard Back', click: () => svc.kvm.home() }] : []),
       check('Cursor Sharing', k.linked !== false && !(svc && svc.kvm.paused), (i) => actions.setKvm({ shared: i.checked })),
+      ...(c ? [check(`Lock Cursor on ${where === 'driving' ? name : id.macName} (${CL.keysLabel(settings.keys.lockKeys, 'mac')})`, svc && svc.kvm.locked, (i) => svc.kvm.setLocked(i.checked))] : []),
       { type: 'separator' },
       check('Share Screen', settings.sharing.on, (i) => actions.setSharing(i.checked)),
       phone
@@ -597,6 +604,15 @@ app.whenReady().then(() => {
     else if (mode === 'driven') hud.show('driven', `${name} is using ${id.macName}`);
     else hud.show('home', `Back on ${id.macName}`);
   });
+  // Cursor lock: the popup goes where the pointer is (the other computer shows its own while we drive it).
+  svc.kvm.on('lock', (on, mode) => {
+    if (mode === 'driving' && !(svc.kvm.local && svc.kvm.local.drives())) return;
+    const where = mode === 'driving' ? (peer.current ? peer.current.name : 'the other computer') : id.macName;
+    hud.show('lock', on ? `Cursor locked on ${where}` : 'Cursor unlocked');
+  });
+  // The lock key at home: a global shortcut, held while connected (pushState syncs it).
+  lockKey = new CL.GlobalLockKey(globalShortcut, () => svc.kvm.toggleLock());
+
   svc.fileClip.on('popup', (kind, text) => hud.show(kind, text));
   svc.clipboard.on('popup', (kind, text) => hud.show(kind, text)); // a picture from the other side
   svc.pcApps.on('popup', (kind, text) => hud.show(kind, text));
@@ -813,7 +829,6 @@ app.on('second-instance', showWindow);
 app.on('activate', showWindow);
 app.on('window-all-closed', () => {}); // keep running in the menu bar
 app.on('will-quit', () => {
-  const { globalShortcut } = require('electron');
   globalShortcut.unregisterAll();
 });
 app.on('before-quit', () => {

@@ -73,9 +73,9 @@ void capture_xevent(XEvent *e);
 int capture_active(void);
 void capture_shutdown(void);
 
-// ---- shortcut.c: the copy/paste-files shortcuts at home (both backends) ----
+// ---- shortcut.c: the copy/paste-files shortcuts at home and the cursor lock key (both backends) ----
 void shortcut_config(const JObj *c);
-void shortcut_key(int ev, int down, int detect);
+void shortcut_key(int ev, int down, int detect, int detectLock);
 void shortcut_tick(void);
 
 // ---- drop.c: file drags across the edge, out (X11): the edge strip, an XDND drop target ----
