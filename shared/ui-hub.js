@@ -25,6 +25,14 @@
   // Ask the phone (only while that page's switch is on: phonehub.js checks).
   UI.hubAsk = (msg) => UI.api.hub({ do: 'send', msg });
 
+  // The folder saved files go to here, by its name: General › Received files on Windows and Linux
+  // (files.received, the one in use), Files › Save to on the Mac (files.folder, '' = Downloads).
+  UI.receivedName = (s) => {
+    const f = (s && s.files) || {};
+    const dir = f.received || f.folder || '';
+    return dir ? dir.split(/[\\/]/).filter(Boolean).pop() || dir : 'Downloads';
+  };
+
   // That page can show the phone's things now.
   UI.hubReady = (s, what) => {
     const h = s && s.hub;

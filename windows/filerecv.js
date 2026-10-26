@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const P = require('../shared/protocol.js');
+const { receivedDir } = require('../shared/received.js');
 
 const T = P.T;
 
@@ -96,7 +97,7 @@ class FileRecv {
       const r = await this.helper.request('folderAt');
       folder = r.path || '';
     } catch (_) { /* helper busy: Downloads */ }
-    this.target = folder && fs.existsSync(folder) ? folder : app.getPath('downloads');
+    this.target = folder && fs.existsSync(folder) ? folder : receivedDir(this.settings, app.getPath('downloads'));
     this.revealed = false;
     for (const f of this.files.values()) if (f.complete) this._place(f);
   }
@@ -155,7 +156,7 @@ class FileRecv {
       if (m.drop === 'send' && !this.settings.files.acceptFromMac) return refuse('not_allowed');
       // total: the whole batch's bytes (file.offer `bytes`, or what fclip.offer said); 0 = unknown.
       const total = Number(m.bytes) > 0 ? Number(m.bytes) : pasted ? pasted.bytes : 0;
-      b = { kind: m.drop, dir: pasted ? pasted.dir : app.getPath('downloads'), app: !!(pasted && pasted.app), count, done: 0, ok: 0, tops: new Map(), placed: [], total, got: 0, at: Date.now() };
+      b = { kind: m.drop, dir: pasted ? pasted.dir : receivedDir(this.settings, app.getPath('downloads')), app: !!(pasted && pasted.app), count, done: 0, ok: 0, tops: new Map(), placed: [], total, got: 0, at: Date.now() };
       this.batches.set(m.batch, b);
       this.expected.delete(m.batch);
     }

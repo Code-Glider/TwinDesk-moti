@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const P = require('../shared/protocol.js');
 const fm = require('./fm');
+const { receivedDir } = require('../shared/received.js');
 
 const T = P.T;
 const MAX_FILES = 10000, MAX_DEPTH = 32;
@@ -168,7 +169,7 @@ class DragRecv {
     const r = await fm.at(this.helper);
     if (this.cur !== c) return;
     const folder = r && r.folder && fs.existsSync(r.folder) ? r.folder : '';
-    c.dest = folder || app.getPath('downloads');
+    c.dest = folder || receivedDir(this.settings, app.getPath('downloads'));
     c.shown = !!folder; // dropped on a folder that's on screen: nothing to reveal
     c.desktop = !!(r && r.desktop && folder);
     try {

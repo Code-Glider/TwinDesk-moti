@@ -3,6 +3,7 @@
 // disk or from the UI goes through normalize(), so main never stores anything out of range.
 const P = require('../shared/protocol.js');
 const CL = require('../shared/cursorlock.js');
+const { normalizeFolder } = require('../shared/received.js');
 
 const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'mac-pc', 'pc-mac', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'apps', 'multi', 'general', 'about'];
 
@@ -125,6 +126,7 @@ function normalize(s) {
       shortcuts: bool(files.shortcuts, true),
       copyKeys: accel(files.copyKeys, 'Control+Alt+C'),
       pasteKeys: accel(files.pasteKeys, 'Control+Alt+V'),
+      receivedFolder: normalizeFolder(files.receivedFolder), // General › Received files ('' = Downloads; shared/received.js)
     },
     notifs: { // (notifs.js): muted = apps never sent
       send: bool(nf.send, false),

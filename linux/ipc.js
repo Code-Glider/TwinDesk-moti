@@ -4,6 +4,7 @@
 const { app, ipcMain, dialog, shell, BrowserWindow, clipboard } = require('electron');
 const path = require('path');
 const P = require('../shared/protocol.js');
+const { receivedDir } = require('../shared/received.js');
 const { LINKS } = require('../shared/about.js');
 const { apply } = require('./settings');
 
@@ -134,6 +135,15 @@ function setupIpc(ctx) {
     Object.keys(p).forEach((k) => p[k] === undefined && delete p[k]);
     change('files', p, () => { smb.applyMount(); kvm.applyConfig(); fileClip.apply(); });
   });
+  // General › Received files (shared/received.js): chosen here only, never by the page itself.
+  handle('chooseReceivedFolder', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const r = await dialog.showOpenDialog(win, { title: 'Folder for received files', buttonLabel: 'Use this folder',
+      defaultPath: receivedDir(settings, app.getPath('downloads')), properties: ['openDirectory', 'createDirectory'] });
+    if (!r.canceled && r.filePaths[0]) change('files', { receivedFolder: r.filePaths[0] });
+  });
+  handle('resetReceivedFolder', () => change('files', { receivedFolder: '' }));
+  handle('openReceivedFolder', () => shell.openPath(receivedDir(settings, app.getPath('downloads'))));
   handle('setShareOn', (on) => smb.setShareOn(on === true));
   handle('chooseShareFolder', async () => {
     const win = BrowserWindow.getFocusedWindow();

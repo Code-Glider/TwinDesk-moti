@@ -130,7 +130,7 @@ UI.tab({
     function save(ids) {
       if (!ids.length) return;
       UI.hubAsk({ t: 'media.save', ids });
-      status.textContent = `Saving ${ids.length} to ${UI.fill('{me}')}’s Downloads…`;
+      status.textContent = `Saving ${ids.length} to ${UI.fill('{me}')}’s ${UI.receivedName(UI.state)}…`;
       if (selecting) { selecting = false; chosen.clear(); }
       paint();
     }

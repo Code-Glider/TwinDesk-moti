@@ -18,6 +18,7 @@ const fs = require('fs');
 const P = require('../shared/protocol.js');
 const fm = require('./fm');
 const pastefiles = require('../shared/pastefiles.js');
+const { receivedDir } = require('../shared/received.js');
 
 const T = P.T;
 
@@ -182,7 +183,7 @@ class FileClip {
     // An app in front (not a file manager, the desktop or TwinDesk itself): the files go into it.
     const into = !front && win && win.app && !win.fm && !win.desktop && !/twindesk/i.test(win.app) ? pastefiles.pasteDir() : '';
     if (into) this.pasting.into = { app: win.app };
-    this.fileRecv.expectBatch(inc.id, front || into || app.getPath('downloads'), inc.bytes, !front && !into);
+    this.fileRecv.expectBatch(inc.id, front || into || receivedDir(this.settings, app.getPath('downloads')), inc.bytes, !front && !into);
     this.link.send({ t: T.FCLIP_PASTE, id: inc.id });
     this.popup('driven', 'Pasting ' + plural(inc.files, 'file') + '…');
     this.onChange();

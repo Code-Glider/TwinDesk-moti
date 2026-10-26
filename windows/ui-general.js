@@ -14,6 +14,11 @@ UI.tab({
   build(body) {
     const { el, api } = UI;
     const startup = UI.switch((v) => api.setStartup(v), { label: 'Start with Windows' });
+    // Received files (shared/received.js): where files sent here and saved from a phone go.
+    const recvChange = UI.button('Change…', () => api.chooseReceivedFolder(), 'small');
+    const recvReset = UI.button('Downloads', () => api.resetReceivedFolder(), 'small');
+    const recvOpen = UI.button('Open', () => api.openReceivedFolder(), 'small');
+    const recvRow = UI.row('Received files', '', [recvOpen, recvReset, recvChange]);
     const hudSw = UI.switch((v) => api.setApp({ hud: v }), { label: 'Show a popup when switching' });
     const fwPill = el('span', { class: 'pill' });
     const fwCheck = UI.button('Check again', () => api.checkFirewall(), 'small');
@@ -47,6 +52,7 @@ UI.tab({
       UI.card('App', [
         UI.row('Start with Windows', '', [startup]),
         UI.row('Show a popup when switching', 'When the mouse and keyboard move between computers', [hudSw]),
+        recvRow,
       ]),
       UI.card('Permissions', [fwRow, btRow, locRow]),
       UI.card('Network and sharing', [wakeRow, sendToRow, bleRow, blePcRow, bleWifiRow]),
@@ -56,6 +62,10 @@ UI.tab({
     return (s) => {
       startup.set(s.startup);
       hudSw.set(s.app.hud);
+      const f = s.files || {};
+      recvReset.hidden = !f.receivedFolder;
+      recvRow.setHint((f.receivedFolder && f.received !== f.receivedFolder ? f.receivedFolder + ' isn’t there now: Downloads meanwhile. ' : (f.received || 'Downloads') + ' · ')
+        + 'Files sent to {me} from another computer or a phone, and what’s saved from a phone’s Files and Photos');
       const fw = s.firewall || {};
       fwPill.textContent = fw.checking ? 'Checking…' : fw.ok ? 'OK' : fw.ok === false ? 'Needs a fix' : '';
       fwPill.className = 'pill ' + (fw.checking ? 'muted' : fw.ok ? 'good' : 'bad');

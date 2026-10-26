@@ -1,8 +1,9 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
 // Main-window actions (preload-app.js → here). Every value is validated by settings.apply().
-const { ipcMain, dialog, shell, BrowserWindow, clipboard, Menu } = require('electron');
+const { ipcMain, dialog, shell, BrowserWindow, clipboard, Menu, app } = require('electron');
 const path = require('path');
 const P = require('../shared/protocol.js');
+const { receivedDir } = require('../shared/received.js');
 const { LINKS } = require('../shared/about.js');
 const { apply } = require('./settings');
 
@@ -145,6 +146,15 @@ function setupIpc(ctx) {
   handle('muteNotifApp', (arg) => arg && typeof arg.app === 'string' && notifs.setMuted(arg.app.slice(0, 300), arg.muted === true));
   handle('clearNotifHistory', () => notifs.clearHistory && notifs.clearHistory());
   handle('openNotifiedApp', (arg) => arg && typeof arg.app === 'string' && ctx.phoneViews && ctx.phoneViews.openNotified(arg.app.slice(0, 200), String(arg.appName || '').slice(0, 100)));
+  // General › Received files (shared/received.js): chosen here only, never by the page itself.
+  handle('chooseReceivedFolder', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const r = await dialog.showOpenDialog(win, { title: 'Folder for received files', buttonLabel: 'Use this folder',
+      defaultPath: receivedDir(settings, app.getPath('downloads')), properties: ['openDirectory', 'createDirectory'] });
+    if (!r.canceled && r.filePaths[0]) change('files', { receivedFolder: r.filePaths[0] });
+  });
+  handle('resetReceivedFolder', () => change('files', { receivedFolder: '' }));
+  handle('openReceivedFolder', () => shell.openPath(receivedDir(settings, app.getPath('downloads'))));
   handle('setShareOn', (on) => smb.setShareOn(on === true));
   handle('chooseShareFolder', async () => {
     const win = BrowserWindow.getFocusedWindow();

@@ -129,7 +129,7 @@ UI.tab({
     function save(names) {
       if (!names.length) return;
       UI.hubAsk({ t: 'fs.save', paths: names.map(join) });
-      status.textContent = `Saving ${names.length === 1 ? names[0] : `${names.length} items`} to ${UI.fill('{me}')}’s Downloads…`;
+      status.textContent = `Saving ${names.length === 1 ? names[0] : `${names.length} items`} to ${UI.fill('{me}')}’s ${UI.receivedName(UI.state)}…`;
       chosen.clear();
       paint();
     }

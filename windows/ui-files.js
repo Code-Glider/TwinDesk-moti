@@ -82,7 +82,8 @@ UI.tab({
       canSend = s.link.state === 'connected';
       zone.classList.toggle('off', !canSend);
       zoneText.textContent = canSend ? 'Drop files or folders here' : 'Connect to send files';
-      zoneHint.textContent = canSend ? 'They go to ' + p.the + '’s Downloads' : '';
+      zoneHint.textContent = !canSend ? '' : p.phone ? 'They go to ' + p.the + '’s Downloads'
+        : 'They go to ' + p.the + '’s Downloads, or the folder chosen there for received files';
       sendBtn.disabled = !canSend;
       const b = f.batch;
       sendBar.hidden = !b;

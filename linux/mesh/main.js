@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const P = require('../../shared/protocol.js');
+const { receivedDir } = require('../../shared/received.js'); // General › Received files
 const CL = require('../../shared/cursorlock.js');
 const store = require('../store');
 const { Discovery, interfaces, isIPv4, ipToInt } = require('../discovery');
@@ -886,7 +887,7 @@ function buildState() {
     session: { ...session, input: helper.backend || '', access: session.type === 'wayland' ? system.inputAccess() : null, inputNote, helperError: helper.error || '' },
     audio: { ...settings.audio, ...sound.view() },
     pcScreen: pcScreen.view(),
-    files: { ...settings.files, ...fileDrop.view(), smb: smb.view(), incoming: fileRecv.view(), drag: kvm.dragRecv.view(), macDrags: kvm.peerDrags, clip: fileClip.view(), session: session.type },
+    files: { ...settings.files, ...fileDrop.view(), received: receivedDir(settings, app.getPath('downloads')), smb: smb.view(), incoming: fileRecv.view(), drag: kvm.dragRecv.view(), macDrags: kvm.peerDrags, clip: fileClip.view(), session: session.type },
     terminal: { ...settings.terminal, ...terminal.view(), installedKey: undefined, server: sshd.view() },
     apps: link.peerOs === P.OS.MAC ? apps.view() : peerApps.view(), // a PC's or Linux computer's apps come through peerapps.js
     pcApps: pcApps.view(),
