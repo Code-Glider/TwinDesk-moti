@@ -79,6 +79,7 @@ const DEFAULT_SETTINGS = {
   app: { openAtLogin: false, keepAwake: true, hud: true }, // hud = popup when switching computers
   updates: { auto: true, notified: '' }, // check GitHub for new releases; notified = last version announced
   audio: { send: false, receive: false, muteLocal: false, volume: 1 }, // Independent, both ways
+  camera: { share: false, device: '' }, // Camera tab (shared/camshare.js): this Mac's camera to the other computer, off until turned on
   terminal: { allowPc: false, connectPc: false }, // the other computer -> this Mac shell; this Mac -> the other one (`ssh twindesk`)
   files: { acceptDrops: true, folder: '', reveal: true, dragEdge: true, // '' = Downloads; dragEdge = drag.policy
     shortcuts: true, copyKeys: 'Control+Alt+C', pasteKeys: 'Control+Alt+V' }, // Copy/paste files
@@ -106,7 +107,7 @@ function loadSettings() {
   const s = read('settings.json', {});
   if (s.sharing) s.sharing.on = false; // screen sharing never starts by itself
   const out = { ...DEFAULT_SETTINGS, ...s };
-  for (const k of ['wake', 'sharing', 'virtual', 'kvm', 'keys', 'clipboard', 'ui', 'app', 'audio', 'terminal', 'files', 'smb', 'apps', 'receive', 'papps', 'notifs', 'updates', 'phone', 'mount', 'hub']) out[k] = { ...DEFAULT_SETTINGS[k], ...(s[k] || {}) };
+  for (const k of ['wake', 'sharing', 'virtual', 'kvm', 'keys', 'clipboard', 'ui', 'app', 'audio', 'terminal', 'files', 'smb', 'apps', 'receive', 'papps', 'notifs', 'updates', 'phone', 'mount', 'hub', 'camera']) out[k] = { ...DEFAULT_SETTINGS[k], ...(s[k] || {}) };
   if (s.ui && s.ui.setupSkipped && s.ui.setupDone === undefined) out.ui.setupDone = true;
   if ((s.rev || 0) < 7) { // Clipboard instant by default
     out.clipboard.mode = 'instant';

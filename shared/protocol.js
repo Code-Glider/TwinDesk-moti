@@ -163,6 +163,15 @@
       AUDIO_ANSWER: 'audio.answer', // receiver->sender {dir, session, sdp}
       AUDIO_ICE: 'audio.ice', // either {dir, session, candidate}
       AUDIO_STOP: 'audio.stop', // sender->receiver {dir}
+      // Camera sharing between two computers (shared/camshare.js, the Camera tab): one's camera in a
+      // window on the other, WebRTC set up through these, the picture straight between them.
+      CAM_POLICY: 'cam.policy', // either way, after welcome and on change {share}: this side lets the other see its camera
+      CAM_OPEN: 'cam.open', // viewer->sharer: show me your camera (it answers cam.offer, or cam.state {status: 'refused'})
+      CAM_CLOSE: 'cam.close', // either way: the viewer's window closed, or the sharer stopped
+      CAM_OFFER: 'cam.offer', // sharer->viewer {sdp}
+      CAM_ANSWER: 'cam.answer', // viewer->sharer {sdp}
+      CAM_ICE: 'cam.ice', // either way {from: 'send'|'view', candidate}
+      CAM_STATE: 'cam.state', // sharer->viewer {status: 'starting'|'live'|'failed'|'refused', error?}
       SCREEN_POLICY: 'screen.policy', // either, viewer->sharer {accept, width?, height?}: a viewer is open and wants the picture (senders capture only while it is true)
       SCREEN_CTL: 'screen.ctl', // either, viewer->sharer {share?, mode?: 'mirror'|'extend', close?}: start/stop or switch the other's sharing; close (with share false: the phone viewer's Close) stops it even without remote
       SCREEN_STATE: 'screen.state', // either, sharer->viewer {on, mode, remote, modes}: what this side shares; remote = it takes screen.ctl

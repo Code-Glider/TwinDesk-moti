@@ -24,6 +24,7 @@ const { Pairing: HostPairing } = require('./hostpair');
 const identity = require('./identity');
 const Screen = require('./screen');
 const Clip = require('./clip');
+const { CamShare } = require('../shared/camshare.js');
 const Helper = require('./helper');
 const Kvm = require('./kvm');
 const Hud = require('./hud');
@@ -99,6 +100,7 @@ let settings = null;
 let device = null;
 let screen = null;
 let clip = null;
+let camShare = null; // Camera tab: the cameras of the two computers (shared/camshare.js)
 let helper = null;
 let kvm = null;
 let sound = null;
@@ -187,6 +189,16 @@ function start() {
     pushState();
   });
   clip = new Clip(link, () => settings.clipboard, pushState, { popup: (kind, text) => hud && hud.show(kind, text), peerName });
+  // With a computer (a phone's camera is phoneview.js openCamera).
+  const computer = () => link.status.state === 'connected' && !(link.current && link.current.os === P.OS.ANDROID);
+  camShare = new CamShare({
+    link: { on: (t, fn) => link.on(t, fn), send: (m) => link.send(m), connected: computer, ble: () => !!(link.current && link.current.transport === 'ble'), closed: (fn) => link.on('closed', fn) },
+    cfg: () => settings.camera,
+    save: saveSettings,
+    popup: (kind, text) => hud && hud.show(kind, text),
+    peerName,
+    onChange: pushState,
+  });
   screen = new Screen({
     link,
     clip,
@@ -295,7 +307,7 @@ function start() {
   });
   updates.start();
   const ipc = setupIpc({ link, discovery, screen, clip, kvm, fileDrop, smb, fileClip, vdd, sound, pcScreen, notifs, wake, terminal, sshd, apps, pcApps, peerApps, updates, settings, save: saveSettings, push: pushState, buildState,
-    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
+    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get camShare() { return camShare; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
     get net() { return net; }, get wifi() { return wifi; }, applyNet, joinHotspot, openBluetoothSettings,
     checkFirewall, fixFirewall, fixInput, setStartup, onApp: () => updateTray(buildState()) });
   pairSync = new PairSync({ link, settings, save: saveSettings, set: ipc.set }); // Two-way switches per pair
@@ -841,6 +853,7 @@ function buildState() {
     keys: settings.keys,
     monitor: settings.monitor,
     clipboard: { ...settings.clipboard, ...clip.view },
+    camera: camShare.state,
     ui: settings.ui,
     app: settings.app,
     version: app.getVersion(),

@@ -22,7 +22,6 @@ UI.tab({
     const name = el('div', { class: 'hero-name' });
     const sub = el('div', { class: 'hero-status' });
     const showBtn = UI.button('Show Phone Screen', () => api.phoneScreen(true), 'primary');
-    const camBtn = UI.button('Show Camera', () => api.phoneCamera(true));
     const discBtn = UI.button('Disconnect', () => api.disconnectPhone());
     // On Bluetooth: onto a direct Wi-Fi link on request, until Back to Bluetooth (netlink.js 'user').
     let wifiOn = false;
@@ -37,7 +36,7 @@ UI.tab({
       dev,
       el('div', { class: 'phone-hero-text' }, [
         name, sub,
-        el('div', { class: 'phone-hero-actions' }, [showBtn, camBtn, wifiBtn, hotspotBtn, discBtn]),
+        el('div', { class: 'phone-hero-actions' }, [showBtn, wifiBtn, hotspotBtn, discBtn]),
       ]),
     ]);
 
@@ -124,8 +123,6 @@ UI.tab({
 
       const ready = br.state === 'ready';
       showBtn.disabled = !ready;
-      camBtn.disabled = !ready; // the camera through wireless debugging too (Android 12 or later)
-      camBtn.title = 'The phone’s camera in a window here (Android 12 or later)';
       const n = s.net || {};
       wifiOn = (n.why || []).includes('user') || !!n.linked; // made for the screen or files too
       wifiBtn.textContent = wifiOn ? 'Back to Bluetooth' : 'Connect with Wi-Fi Direct';

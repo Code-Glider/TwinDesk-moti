@@ -3,7 +3,7 @@
 // disk or from the UI goes through normalize(), so main never stores anything out of range.
 const P = require('../shared/protocol.js');
 
-const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'mac-pc', 'pc-mac', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'apps', 'multi', 'general', 'about'];
+const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'mac-pc', 'pc-mac', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'apps', 'multi', 'general', 'about'];
 
 const OLD_TABS = { display: 'mac-pc', receive: 'mac-pc', share: 'pc-mac' }; // older names
 
@@ -90,6 +90,12 @@ function normalize(s) {
       // 'pace'): 'fast' (default, shown the moment it is decoded) | 'smooth' (about a frame of buffer)
       pacing: mon.pacing === 'smooth' && (s.rev || 0) >= 8 ? 'smooth' : 'fast', // rev 8: back to Fastest once
       framegen: bool(mon.framegen, false), // in-between frames on the GPU (shared/framegen.js), off by default
+    },
+    // Camera tab (shared/camshare.js): this computer's camera to the other one, off until turned
+    // on; device: which camera (a deviceId), '' = the default one
+    camera: {
+      share: bool((s.camera || {}).share, false),
+      device: typeof (s.camera || {}).device === 'string' ? s.camera.device.slice(0, 200) : '',
     },
     audio: {
       receive: bool(audio.receive, true), // play the Mac's sound here (audio.policy W→M)

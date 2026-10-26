@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('macshare', {
   setTab: call('setTab'),
   setMulti: call('setMulti'),
   setAudio: call('setAudio'),
+  camera: call('camera'),
   setTerminal: call('setTerminal'),
   openTerminal: call('openTerminal'),
   setupSshd: call('setupSshd'),

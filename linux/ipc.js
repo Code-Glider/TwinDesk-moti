@@ -95,6 +95,17 @@ function setupIpc(ctx) {
   handle('setTab', (tab) => change('ui', { tab })); // invalid names fall back in normalize()
   handle('setMulti', (on) => require('./multi').set(on === true)); // Multi-device: TwinDesk restarts
   handle('setAudio', (partial) => change('audio', partial, () => sound.apply()));
+  // Camera tab: the other computer's camera here, this one's there (shared/camshare.js).
+  handle('camera', (m) => {
+    const c = ctx.camShare;
+    if (!c || !m || typeof m !== 'object') return;
+    if (m.do === 'view') c.view();
+    else if (m.do === 'close') c.closeView();
+    else if (m.do === 'share') c.setShare(m.on === true);
+    else if (m.do === 'device') c.setDevice(m.id);
+    else if (m.do === 'stop') c.stopSending();
+    else if (m.do === 'devices') c.listDevices();
+  });
   handle('setTerminal', (partial) => {
     const p = partial && typeof partial === 'object' ? { enabled: partial.enabled, allowMac: partial.allowMac } : {};
     Object.keys(p).forEach((k) => p[k] === undefined && delete p[k]);

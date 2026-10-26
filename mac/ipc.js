@@ -2,7 +2,7 @@
 // Actions from the control window (and the menu bar): validate, save settings, apply.
 'use strict';
 
-const { ipcMain, shell, app, screen, dialog, clipboard, Menu } = require('electron');
+const { ipcMain, shell, app, screen, dialog, clipboard, Menu, systemPreferences } = require('electron');
 const P = require('../shared/protocol.js');
 const { LINKS } = require('../shared/about.js');
 const store = require('./store');
@@ -17,7 +17,7 @@ const SETTINGS_URLS = {
   location: 'x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices',
   extensions: 'x-apple.systempreferences:com.apple.ExtensionsPreferences?Sharing',
 };
-const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'share', 'receive', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'apps', 'multi', 'general', 'about'];
+const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'share', 'receive', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'apps', 'multi', 'general', 'about'];
 
 const bool = (v) => !!v;
 const clamp = (lo, hi, dflt) => (v) => {
@@ -448,6 +448,22 @@ function setupIpc(ctx) {
     setAudio(partial) {
       setGroup('audio', partial);
       ctx.audio.applySettings();
+    },
+    // Camera tab: the other computer's camera here, this Mac's there (shared/camshare.js). macOS
+    // asks for the camera when sharing is first turned on.
+    camera(m) {
+      const c = ctx.camShare;
+      if (!c || !m || typeof m !== 'object') return;
+      const allowed = async () => {
+        const st = systemPreferences.getMediaAccessStatus('camera');
+        return st === 'granted' || (st === 'not-determined' && systemPreferences.askForMediaAccess('camera'));
+      };
+      if (m.do === 'view') c.view();
+      else if (m.do === 'close') c.closeView();
+      else if (m.do === 'share') c.setShare(m.on === true, allowed);
+      else if (m.do === 'device') c.setDevice(m.id);
+      else if (m.do === 'stop') c.stopSending();
+      else if (m.do === 'devices') c.listDevices();
     },
     // "Share sound with the screen" (Display › Mac → PC).
     setScreenSound(on) {

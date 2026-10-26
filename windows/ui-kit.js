@@ -29,6 +29,7 @@ const ICONS = {
   photo: 'M3 4.5h14v11H3z M3 13l4-4 3.5 3.5 2-2L17 14.5 M12.5 7.5h.1',
   doc: 'M5 2.5h6.5L15 6v11.5H5z M11.5 2.5V6H15',
   folder: 'M2.5 5h5.5l1.5 2h8v9.5h-15z',
+  camera: 'M2.5 6h10v8h-10z M12.5 8.5l5-2.5v8l-5-2.5', // a video camera: Camera
   multi: 'M2 5h9v6.5H2z M5 14h3 M6.5 11.5V14 M13 4h5v12h-5z M15 13.5h1', // a computer and a phone: Multi-device
 };
 

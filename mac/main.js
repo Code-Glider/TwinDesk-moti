@@ -55,6 +55,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const P = require('../shared/protocol.js');
+const { CamShare } = require('../shared/camshare.js');
 const store = require('./store');
 const identity = require('./identity');
 const { Discovery, interfaces } = require('./discovery');
@@ -207,6 +208,7 @@ function pushState() {
     state.kvm = settings.kvm;
     state.keys = settings.keys;
     state.clipboard = clip ? { ...settings.clipboard, ...clip.view } : null;
+    state.camera = svc && svc.camShare ? svc.camShare.state : null;
     state.ui = settings.ui;
     state.app = settings.app;
     if (kvm) state.input = kvm.view;
@@ -527,6 +529,22 @@ app.whenReady().then(() => {
   svc.phone.bridge.wired = svc.wired;
   svc.phone.wired = svc.wired;
   svc.phoneViews = new PhoneViews({ bridge: svc.phone.bridge, phone: svc.phone, getSettings: () => settings, server: peer, fileSend: svc.fileSend });
+  // Camera tab: the cameras of the two computers (shared/camshare.js; a phone's is phoneViews.openCamera).
+  const computer = () => !!peer.current && peer.current.os !== P.OS.ANDROID;
+  svc.camShare = new CamShare({
+    link: {
+      on: (t, fn) => (t === 'welcome' ? peer.on('client', (ctx) => ctx.os !== P.OS.ANDROID && fn()) : peer.on(`t:${t}`, (m) => fn(m))),
+      send: (m) => peer.sendToClient(m),
+      connected: computer,
+      ble: () => !!(peer.current && peer.current.transport === 'ble'),
+      closed: (fn) => peer.on('closed', fn),
+    },
+    cfg: () => settings.camera,
+    save: () => store.saveSettings(settings),
+    popup: (kind, text) => hud && hud.show(kind, text),
+    peerName: () => (peer.current && peer.current.name) || 'the other computer',
+    onChange: pushState,
+  });
   svc.phoneViews.on('change', pushState);
   // A phone notification clicked here: its app in a window.
   svc.notifs.on('click', (m) => peer.current && peer.current.os === P.OS.ANDROID && svc.phoneViews.openNotified(m.app, m.appName));
