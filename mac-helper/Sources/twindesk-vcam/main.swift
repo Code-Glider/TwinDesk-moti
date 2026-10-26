@@ -66,8 +66,8 @@ func property<T>(_ object: CMIOObjectID, _ selector: Int, scope: Int = kCMIOObje
   guard CMIOObjectGetPropertyDataSize(object, &addr, 0, nil, &size) == noErr, size > 0 else { return [] }
   var items = [T](repeating: empty, count: Int(size) / MemoryLayout<T>.stride)
   var used: UInt32 = 0
-  guard CMIOObjectGetPropertyData(object, &addr, 0, nil, size, &used, &items) == noErr else { return [] }
-  return items
+  let status = items.withUnsafeMutableBytes { CMIOObjectGetPropertyData(object, &addr, 0, nil, size, &used, $0.baseAddress!) }
+  return status == noErr ? items : []
 }
 
 func name(_ object: CMIOObjectID) -> String {

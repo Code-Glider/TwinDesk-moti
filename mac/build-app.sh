@@ -175,12 +175,18 @@ if [ -n "$MAC_IDENTITY" ]; then
   ID="$MAC_IDENTITY"
   OPTIONS="--options runtime --timestamp"
   echo "Signing with Developer ID: $ID"
-elif KC=$(scripts/signing-identity.sh 2>/dev/null); then
+elif KC=$(scripts/signing-identity.sh 2>/dev/null) && SIGNTEST=$(mktemp) && cp /usr/bin/true "$SIGNTEST" \
+  && { security list-keychains -d user | grep -qF "$KC" || eval "security list-keychains -d user -s \"$KC\" $(security list-keychains -d user | tr '\n' ' ')"; } \
+  && codesign --force --keychain "$KC" --sign "TwinDesk Self-Signed" "$SIGNTEST" 2>/dev/null; then
+  # codesign finds the certificate only in a keychain on the search list (a fresh CI machine's isn't):
+  # it's added, and tried on a copy of true first; without it, ad-hoc below.
+  rm -f "$SIGNTEST"
   SIGN="--keychain $KC --sign"
   ID="TwinDesk Self-Signed"
   OPTIONS=""
   echo "Signing with local self-signed certificate"
 else
+  rm -f "$SIGNTEST"
   echo "note: signing ad-hoc: permissions won't carry over to the next update"
   SIGN="--sign"
   ID="-"
