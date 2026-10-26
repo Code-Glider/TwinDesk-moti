@@ -1,32 +1,37 @@
 #!/bin/sh
 # TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
-# Creates dist/TwinDesk.dmg from dist/TwinDesk.app (npm run dmg): the app and an Applications
-# link over the hand-drawn background in dmg/ (dmg/make-background.sh renders it).
-# The window layout is written by dmgbuild, installed once into dist/.dmgbuild (needs python3).
+# Creates dist/TwinDesk-<version>-<arch>.dmg from dist/TwinDesk.app (npm run dmg), named after
+# the app inside it like the other platforms' downloads: TwinDesk-2.3.0-arm64.dmg (Apple silicon)
+# or TwinDesk-2.3.0-x64.dmg (Intel), the words the updater tells them apart by (shared/updates.js
+# pickAsset, the same since 2.0.0). A name as the argument instead: ./build-dmg.sh Other.dmg.
+# Its volume is "TwinDesk <version>", so an older one still mounted isn't the one that opens.
+# The app and an Applications link over the hand-drawn background in dmg/ (dmg/make-background.sh
+# renders it); the window layout is written by dmgbuild, installed once into dist/.dmgbuild (needs python3).
 set -e
 cd "$(dirname "$0")"
 
 APP="dist/TwinDesk.app"
-VER="$(node -p "require('./package.json').version" 2>/dev/null || echo "")"
-if [ -n "$1" ]; then
-  DMG_NAME="$1"
-elif [ -n "$VER" ]; then
-  DMG_NAME="TwinDesk-${VER}.dmg"
-else
-  DMG_NAME="TwinDesk.dmg"
-fi
-
-case "$DMG_NAME" in
-  */*) DMG="$DMG_NAME" ;;
-  *) DMG="dist/$DMG_NAME" ;;
-esac
-VOLNAME="TwinDesk"
-VENV="dist/.dmgbuild"
-
 if [ ! -d "$APP" ]; then
   echo "Error: $APP not found. Run ./build-app.sh first." >&2
   exit 1
 fi
+
+# The version and architecture of the app that was built (build-app.sh x64 / arm64).
+VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null \
+  || node -p "require('./package.json').version")"
+ARCH="$(lipo -archs "$APP/Contents/MacOS/TwinDesk")"
+case "$ARCH" in
+  x86_64) ARCH=x64 ;;
+  arm64) ;;
+  *) echo "Error: $APP is '$ARCH', not one architecture (build-app.sh x64 or arm64)." >&2; exit 2 ;;
+esac
+DMG_NAME=${1:-TwinDesk-$VER-$ARCH.dmg}
+case "$DMG_NAME" in
+  */*) DMG="$DMG_NAME" ;;
+  *) DMG="dist/$DMG_NAME" ;;
+esac
+VOLNAME="TwinDesk $VER"
+VENV="dist/.dmgbuild"
 
 if [ ! -x "$VENV/bin/dmgbuild" ]; then
   echo "Installing dmgbuild into $VENV..."

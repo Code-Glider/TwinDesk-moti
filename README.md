@@ -606,8 +606,12 @@ cd mac
 npm install
 npm run build:helper
 npm start                       # run from source
-npm run dist && npm run dmg     # build TwinDesk.app and TwinDesk.dmg in mac/dist/
+npm run dist && npm run dmg     # build TwinDesk.app and TwinDesk-<version>-<arch>.dmg in mac/dist/
 ```
+
+The disk image is named after the app inside it: `TwinDesk-2.3.0-arm64.dmg` for Apple Silicon,
+`TwinDesk-2.3.0-x64.dmg` for Intel. Keep those names on a release: the in-app updater picks the
+one for each Mac by them.
 
 By default, `npm run dist` targets the Mac's current architecture. To build an Intel
 package from an Apple Silicon Mac, use:
@@ -616,8 +620,8 @@ package from an Apple Silicon Mac, use:
 npm run dist:x64 && npm run dmg
 ```
 
-To build the Intel app and produce the requested named image in one step, run
-`npm run dmg:intel`; it writes `mac/dist/Twindesk_intel.dmg`.
+To build the Intel app and its image in one step, run `npm run dmg:intel`; it writes
+`mac/dist/TwinDesk-<version>-x64.dmg`.
 
 Use `npm run dist:arm64 && npm run dmg` for Apple Silicon explicitly. The x64 build
 cross-compiles the Swift helpers and packages the x64 Electron runtime, so it does

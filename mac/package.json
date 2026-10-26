@@ -14,7 +14,7 @@
     "dist:x64": "./build-app.sh x64",
     "dist:arm64": "./build-app.sh arm64",
     "dmg": "./build-dmg.sh",
-    "dmg:intel": "./build-app.sh x64 && ./build-dmg.sh Twindesk_intel.dmg"
+    "dmg:intel": "./build-app.sh x64 && ./build-dmg.sh"
   },
   "dependencies": {
     "ws": "^8.22.0"
