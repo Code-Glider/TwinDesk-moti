@@ -47,7 +47,8 @@ UI.tab({
 
       // Recent notifications
       const history = n.history || [];
-      const hk = JSON.stringify(history.map((h) => [h.id, h.at]));
+      const icons = n.historyIcons || {};
+      const hk = JSON.stringify([history.map((h) => [h.id, h.at]), Object.keys(icons)]);
       if (hk !== histKey) {
         histKey = hk;
         if (history.length) {
@@ -59,8 +60,8 @@ UI.tab({
             const topText = [appName, item.title].filter(Boolean).join(' · ');
             const subText = [item.subtitle, item.body].filter(Boolean).join(' — ') || 'Notification';
             const r = UI.row(topText, `${subText} · ${time}`, [openBtn]);
-            if (item.icon) {
-              const img = el('img', { src: item.icon, style: 'width: 20px; height: 20px; border-radius: 4px; margin-right: 8px; vertical-align: middle; flex-shrink: 0;' });
+            if (icons[item.app]) {
+              const img = el('img', { src: icons[item.app], style: 'width: 20px; height: 20px; border-radius: 4px; margin-right: 8px; vertical-align: middle; flex-shrink: 0;' });
               r.querySelector('.text').prepend(img);
               r.classList.add('with-ico');
             }

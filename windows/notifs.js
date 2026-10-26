@@ -24,6 +24,9 @@ class Notifs {
     this.live = new Set(); // shown toasts, kept alive until closed
     this.echoes = []; // {title, body, until}: shown here from the other side, never sent back
     this.history = []; // received notifications history from peer
+    // app → its icon (data: URL): the phone sends it with an app's first notification only, so the
+    // later ones in Recent take it from here; sent once per app in view(), not with every item
+    this.historyIcons = new Map();
 
     const link = this.link;
     link.on('welcome', () => {
@@ -118,8 +121,12 @@ class Notifs {
       subtitle: str(m.subtitle, 200),
       body: str(m.body, 1000),
       at: Math.round(Number(m.at)) || Date.now(),
-      icon: (typeof m.icon === 'string' && m.icon.startsWith('data:image/')) ? m.icon : '',
     };
+    if (item.app && typeof m.icon === 'string' && m.icon.startsWith('data:image/') && m.icon.length < 200000) {
+      this.historyIcons.delete(item.app);
+      this.historyIcons.set(item.app, m.icon);
+      if (this.historyIcons.size > 60) this.historyIcons.delete(this.historyIcons.keys().next().value);
+    }
     this.history = [item, ...(this.history || []).filter((x) => x.id !== item.id)].slice(0, 50);
 
     if (Notification.isSupported()) {
@@ -153,6 +160,8 @@ class Notifs {
       shown: this.shown,
       apps: [...this.apps.values()].sort((a, b) => b.at - a.at).slice(0, 40),
       history: this.history || [],
+      historyIcons: Object.fromEntries([...new Set(this.history.map((h) => h.app))]
+        .filter((a) => this.historyIcons.has(a)).map((a) => [a, this.historyIcons.get(a)])),
     };
   }
 }
