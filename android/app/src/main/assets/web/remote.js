@@ -14,6 +14,7 @@
   const $ = (id) => document.getElementById(id);
   let opts = { mode: 'pad', name: 'the computer', me: 'this device', connected: true, os: '', ble: false, speed: 1, tap: true, smooth: true, pad: {} };
   let allowed = null; // the computer's remote.state
+  let why = ''; // …and why it doesn't take it now
 
   // ---- keys and buttons held down: counted (two controls may press the same key), all let go on close ----
   const held = new Map(); // KeyboardEvent.code or 'Mouse0'/'Mouse1'/'Mouse2' -> how many controls hold it
@@ -46,8 +47,8 @@
     document.body.classList.toggle('pad', !game);
     $('name').textContent = `${game ? 'Gamepad' : 'Touchpad'} · ${opts.name}`;
     const note = !opts.connected ? `Not connected to ${opts.name}. Connect from TwinDesk’s Overview.`
-      : allowed === false ? `${opts.name} doesn’t take input from ${opts.me}. On ${opts.name}, turn on Cursor › “Use ${opts.me}’s mouse and keyboard on ${opts.name}” (or “Let ${opts.me} Control ${opts.name}” in its tray menu).`
-        : allowed === null && (opts.os === 'mac' || opts.os === 'linux') ? `${opts.name} doesn’t take the remote yet: for now only TwinDesk on Windows does.`
+      : allowed === false ? (why || `${opts.name} doesn’t take input from ${opts.me}. On ${opts.name}, turn on Remote in TwinDesk.`)
+        : allowed === null && (opts.os === 'mac' || opts.os === 'linux') ? `${opts.name} doesn’t answer the remote: update TwinDesk there.`
           : '';
     $('note').textContent = note;
     $('note').hidden = !note;
@@ -59,6 +60,7 @@
       if (!opts.connected) { allowed = null; releaseAll(); }
     } else if (m.t === 'remote.state') {
       allowed = m.allowed === true;
+      why = typeof m.why === 'string' ? m.why : '';
       if (!allowed) releaseAll();
     } else return;
     render();

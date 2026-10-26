@@ -57,6 +57,7 @@ if (!app.requestSingleInstanceLock()) {
 const P = require('../shared/protocol.js');
 const { CamShare } = require('../shared/camshare.js');
 const { VirtualCam } = require('../shared/vcam.js');
+const { PhoneRemote } = require('../shared/phone-remote.js');
 const { NowPlaying } = require('../shared/nowplaying.js');
 const CL = require('../shared/cursorlock.js');
 const store = require('./store');
@@ -214,6 +215,7 @@ function pushState() {
     state.clipboard = clip ? { ...settings.clipboard, ...clip.view } : null;
     state.camera = svc && svc.camShare ? svc.camShare.state : null;
     state.vcam = svc && svc.vcam ? svc.vcam.view() : null;
+    state.remote = svc && svc.phoneRemote ? svc.phoneRemote.view : null;
     state.phoneMedia = svc && svc.nowPlaying ? svc.nowPlaying.view : null;
     state.btAudio = null; // macOS can't be a phone's Bluetooth speaker
     state.ui = settings.ui;
@@ -547,18 +549,15 @@ app.whenReady().then(() => {
   svc.nowPlaying.on('change', pushState);
   // Camera tab: the cameras of the two computers (shared/camshare.js; a phone's is phoneViews.openCamera).
   const computer = () => !!peer.current && peer.current.os !== P.OS.ANDROID;
-  // Camera › Virtual camera (shared/vcam.js, vcam.js): Show goes to a camera apps can pick. Turned
-  // on or off, a camera open now reopens the other way (a window, or hidden and in the camera).
+  // Camera › Virtual camera (shared/vcam.js, vcam.js): the running camera's picture also goes to a
+  // camera apps can pick.
   svc.vcam = new VirtualCam({
     driver: require('./vcam'),
     cfg: () => settings.camera,
     save: () => store.saveSettings(settings),
     onChange: pushState,
-    onReady: (ready) => {
-      svc.camShare.reopen();
-      const cam = [...svc.phoneViews.views.values()].find((v) => v.kind === 'camera');
-      if (cam && !!cam.virtual !== ready) svc.phoneViews.openCamera({ facing: cam.facing });
-    },
+    onReady: () => svc.phone.bridge._tellPhone(), // the phone's Camera page says so
+    ui: () => win,
   });
   svc.phoneViews.vcam = svc.vcam;
   svc.camShare = new CamShare({
@@ -574,7 +573,6 @@ app.whenReady().then(() => {
     popup: (kind, text) => hud && hud.show(kind, text),
     peerName: () => (peer.current && peer.current.name) || 'the other computer',
     onChange: pushState,
-    virtual: () => svc.vcam.ready,
   });
   svc.vcam.check();
   svc.phoneViews.on('change', pushState);
@@ -586,6 +584,9 @@ app.whenReady().then(() => {
   setupNet();
   setupHub();
   svc.kvm.local = svc.phone.bridge;
+  // The phone's Remote page: touchpad, keyboard and gamepad here, taken only with the mouse at home.
+  svc.phoneRemote = new PhoneRemote({ server: peer, helper: svc.helper, getSettings: () => settings, atHome: () => svc.kvm.mode === 'home', onChange: pushState });
+  svc.kvm.on('where', () => svc.phoneRemote.refresh());
   const blockEdge = svc.kvm.blockEdge;
   svc.kvm.blockEdge = () => blockEdge() || svc.phoneViews.focused; // moving inside the phone window never crosses
   svc.apps.setSharing = (on, by) => actions.setSharing(on, by);

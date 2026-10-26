@@ -10,8 +10,10 @@
   const api = window.phoneview;
   const q = new URLSearchParams(location.search);
   const kind = q.get('kind') || 'screen';
-  // Camera › Virtual camera: a camera's window is hidden and its frames go to that camera (shared/vcam-feed.js).
-  const vcam = kind === 'camera' && q.get('vcam') === '1' && window.VcamFeed ? window.VcamFeed((buf) => api.vcam(buf)) : null;
+  // A camera's window opens hidden: its picture goes to the Camera tab, and to the virtual camera
+  // while that's on (shared/vcam-feed.js); Camera › Rotate turns it here too.
+  const vcam = kind === 'camera' && window.CamOut ? window.CamOut() : null;
+  let turn = 0;
   document.body.classList.add(kind);
   document.getElementById('title').textContent = q.get('title') || 'Phone';
   const canvas = document.getElementById('screen');
@@ -123,10 +125,13 @@
     const stage = document.getElementById('stage');
     const w = canvas.width || (size && size.width) || 9;
     const h = canvas.height || (size && size.height) || 19;
-    const k = Math.min(stage.clientWidth / w, stage.clientHeight / h);
+    const side = turn % 180 !== 0; // turned sideways: fitted by its turned size
+    const k = Math.min(stage.clientWidth / (side ? h : w), stage.clientHeight / (side ? w : h));
     canvas.style.width = `${Math.floor(w * k)}px`;
     canvas.style.height = `${Math.floor(h * k)}px`;
+    canvas.style.transform = turn ? `rotate(${turn}deg)` : '';
   }
+  if (vcam) vcam.onRotate((deg) => { turn = deg; fit(); });
   new ResizeObserver(() => {
     fit();
     // An app window: its virtual display follows the window (device pixels).

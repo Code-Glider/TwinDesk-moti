@@ -55,10 +55,12 @@ UI.tab({
     const btPill = el('span', { class: 'pill' });
     const btRow = UI.row('Bluetooth', 'For a phone or computer that isn’t on this network', [btPill, UI.button('Open', () => api.openBluetoothSettings(), 'small')]);
 
+    const media = UI.mediaControlsRow(); // a phone's media controls on Overview (shared/ui-nowplaying.js)
     body.append(
       UI.card('App', [
         UI.row('Open at login', 'Starts in the tray', [startup]),
         UI.row('Show a popup when switching', 'When the mouse and keyboard move between computers', [hudSw]),
+        media.el,
         recvRow,
       ]),
       UI.card('Permissions', [fwRow, btRow, steadyRow]),
@@ -70,6 +72,7 @@ UI.tab({
     );
 
     return (s) => {
+      media.update(s);
       startup.set(s.startup);
       hudSw.set(s.app.hud);
       const f = s.files || {};

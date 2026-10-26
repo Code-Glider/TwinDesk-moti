@@ -211,6 +211,7 @@
       PHONE_WAKE: 'phone.wake', // computer->phone: screen on and ask for the unlock (on the phone), e.g. to open an app from a notification clicked here
       PHONE_AWAKE: 'phone.awake', // phone->computer {unlocked, waiting?}: unlocked (now, or once the person unlocked it); waiting = it's asking for the unlock
       PHONE_MIRROR: 'phone.mirror', // phone->computer {open}: asked on the phone (its Screen page), its screen in a window on the computer (open, or brought to the front), or open false: the phone's windows there closed
+      PHONE_CAMERA: 'phone.camera', // phone->computer {open, facing?}: asked on the phone (its Camera page), its camera running on the computer (the Camera tab's picture and the virtual camera), facing 'back' | 'front'; open false: stopped. The computer says how it's going in adb.bridge's camera
       PHONE_SOUND_WANT: 'phone.sound.want', // computer->phone {on}: its sound here without wireless debugging (playback capture, Start on the phone), while adb can't carry it
       PHONE_SOUND: 'phone.sound', // phone->computer {codec: 'opus'|'pcm', p: [base64]}: 20 ms each (Opus packets, or 48 kHz stereo s16le)
       PHONE_SOUND_STATE: 'phone.sound.state', // phone->computer {on, waiting (for Start on the phone), error, codec}
@@ -236,7 +237,7 @@
       ADB_STATE: 'adb.state', // phone->Mac {devOptions, wifi (wireless debugging on), canEnable (WRITE_SECURE_SETTINGS granted), address, full, port (its wireless debugging port from its own mDNS, 0 if not known yet), net (on a Wi-Fi network: wireless debugging can't be on without one)}
       ADB_ENABLE: 'adb.enable', // Mac->phone {on}: switch wireless debugging (needs canEnable)
       ADB_PAIR: 'adb.pair', // phone->computer {code, port?}: the code from "Pair device with pairing code", typed on the phone (port: its pairing port, 0 if unknown)
-      ADB_BRIDGE: 'adb.bridge', // computer->phone {state, message}: how the computer's wireless debugging link is doing (off|missing|waitingWifi|needsPair|connecting|ready|error)
+      ADB_BRIDGE: 'adb.bridge', // computer->phone {state, message}: how the computer's wireless debugging link is doing (off|missing|waitingWifi|needsPair|connecting|ready|error), viewed, camera {on, facing, error, virtual} (its camera running there, for its Camera page)
       // A session through Bluetooth moves onto Wi-Fi for files and screens (shared/netlink.js): one
       // side hosts a network (Wi-Fi Direct group / Windows' legacy access point), the other joins
       // it, and the guest moves the session onto it (hello {resume}, below) without ending it.

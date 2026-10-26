@@ -24,6 +24,8 @@ const { DockStub, addToDock } = require('./dockstub');
 const T = P.T;
 const NOTIFIED_MS = 60000; // how long a clicked notification waits for the unlock and wireless debugging
 let nextId = 1;
+let quitting = false; // a camera's window hides on close, but not on quit
+app.on('before-quit', () => { quitting = true; });
 
 class PhoneViews extends EventEmitter {
   constructor({ bridge, phone, getSettings, server, fileSend }) {
@@ -32,6 +34,7 @@ class PhoneViews extends EventEmitter {
     this.views = new Map(); // id -> {id, kind, app, title, win, session, keys, size}
     this.stubs = new Map(); // package -> DockStub, while that app has a window here
     bridge.views = this;
+    this.on('change', () => bridge._tellPhone()); // its Screen and Camera pages follow the windows here
     this.on('change', () => bridge._tellPhone());
     this.notified = null; // {pkg, name, at, unlocked}: a clicked notification's app, waiting to open
     // The app in front on the phone, which its Accessibility says (the full app): Return in a chat
@@ -51,6 +54,13 @@ class PhoneViews extends EventEmitter {
     // The phone's own Show and Close (its Screen page): its screen in a window here (openScreen
     // decides how: wireless debugging, Wi-Fi first when on Bluetooth, or a popup saying what's
     // missing), or its windows here closed (not the hidden ones playing its sound).
+    // The phone's own Camera page: its camera running here (the Camera tab's picture, the virtual
+    // camera), back or front, or stopped.
+    server.on(`t:${T.PHONE_CAMERA}`, (m) => {
+      if (m && m.open === false) {
+        for (const v of this.list()) if (v.kind === 'camera') this.close(v.id);
+      } else this.openCamera({ facing: m && m.facing });
+    });
     server.on(`t:${T.PHONE_MIRROR}`, (m) => {
       if (m && m.open === false) {
         for (const v of this.list()) this.close(v.id);
@@ -92,7 +102,7 @@ class PhoneViews extends EventEmitter {
   }
 
   list() {
-    return [...this.views.values()].filter((v) => v.kind !== 'sound' && v.kind !== 'netsound').map((v) => ({ id: v.id, kind: v.kind, app: v.app || null, title: v.title, virtual: !!v.virtual }));
+    return [...this.views.values()].filter((v) => v.kind !== 'sound' && v.kind !== 'netsound').map((v) => ({ id: v.id, kind: v.kind, app: v.app || null, title: v.title, facing: v.facing || null, shown: !!(v.win && !v.win.isDestroyed() && v.win.isVisible()), error: v.error || '' }));
   }
 
   get focused() {
@@ -111,22 +121,66 @@ class PhoneViews extends EventEmitter {
     this._open({ kind: 'screen', title: name, width: w, height: h, opts: this.bridge.sessionOpts('screen') });
   }
 
-  // The phone's camera in a window (scrcpy's camera source, Android 12 or later): facing 'back' or
-  // 'front'; the camera picks its best size up to 1920 on the long side (a size it doesn't have
-  // would fail), at 30 fps. Its light and zoom from the window's buttons.
-  openCamera(opts = {}) {
-    // Camera › Virtual camera on (shared/vcam.js): a hidden window, its frames to that camera.
-    const virtual = !!(this.vcam && this.vcam.ready);
-    const want = opts.facing === 'front' ? 'front' : 'back';
-    const open = [...this.views.values()].find((v) => v.kind === 'camera');
-    if (open && !!open.virtual === virtual && (!virtual || open.facing === want)) return virtual || (open.win.show(), open.win.focus());
-    if (open) open.win.close();
-    this.cameraFacing = opts.facing === 'front' ? 'front' : 'back';
+  // The phone's camera (Camera's switch, or the phone's Camera page; scrcpy's camera source, Android
+  // 12 or later): facing 'back' or 'front'; the camera picks its best size up to 1920 on the long
+  // side (a size it doesn't have would fail), at 30 fps. Its window opens hidden: the picture goes
+  // to the Camera tab and the virtual camera (shared/vcam.js); show: the window too (Camera ›
+  // Window), its light and zoom from the window's buttons. Closing the window only hides it. The other facing with it
+  // running: the same window switches (_flip).
+  openCamera(opts) {
+    opts = opts && typeof opts === 'object' ? opts : {};
+    const want = opts.facing === 'front' || opts.facing === 'back' ? opts.facing : null;
+    const open = [...this.views.values()].find((v) => v.kind === 'camera' && !v.ending);
+    if (open) {
+      if (want && want !== open.facing) this._flip(open, want);
+      if (opts.show) {
+        open.win.show();
+        open.win.focus();
+      }
+      return;
+    }
+    const facing = want || 'back';
     const name = ((this.server.current && this.server.current.name) || 'Phone') + ' Camera';
-    const cam = { videoSource: 'camera', cameraFacing: this.cameraFacing, cameraFps: 30, maxSize: 1920 };
-    if (/^\d{2,5}x\d{2,5}$/.test(String(opts.size || ''))) cam.cameraSize = opts.size;
-    const v = this._open({ kind: 'camera', title: name, width: 854, height: 512, opts: this.bridge.sessionOpts('camera', cam), hidden: virtual, virtual });
-    if (v) v.facing = this.cameraFacing;
+    const v = this._open({ kind: 'camera', title: name, width: 854, height: 512, opts: this._cameraOpts(facing, opts.size), hidden: !opts.show });
+    if (!v) return;
+    v.facing = facing;
+    this.emit('change'); // with its facing, for the tab and the phone
+  }
+
+  _cameraOpts(facing, size) {
+    const cam = { videoSource: 'camera', cameraFacing: facing, cameraFps: 30, maxSize: 1920 };
+    if (/^\d{2,5}x\d{2,5}$/.test(String(size || ''))) cam.cameraSize = size;
+    return this.bridge.sessionOpts('camera', cam);
+  }
+
+  // Front or back in the same window: the phone lets go of one camera a moment after its session
+  // ends, and a session started before that can't open the other (it ended, and its window with it).
+  async _flip(v, facing) {
+    v.facing = facing;
+    v.error = '';
+    const token = (v.flips = (v.flips || 0) + 1);
+    const old = v.session;
+    v.session = null; // first: its end isn't the window's
+    if (old) old.stop();
+    this.bridge._tellPhone();
+    this.emit('change');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await new Promise((r) => setTimeout(r, 1200 + attempt * 1000));
+      if (v.flips !== token || v.win.isDestroyed()) return;
+      try {
+        await this._start(v, this._cameraOpts(facing));
+        return;
+      } catch (e) {
+        v.error = e.message;
+      }
+    }
+    this.emit('change');
+  }
+
+  // For the phone's Camera page (phone-bridge.js): its camera here, which one, and the virtual camera.
+  cameraState() {
+    const v = [...this.views.values()].find((x) => x.kind === 'camera' && !x.ending);
+    return { on: !!v, facing: v ? v.facing : null, error: v ? v.error || '' : '', virtual: !!(this.vcam && this.vcam.ready) };
   }
 
   openApp(pkg, name) {
@@ -180,7 +234,9 @@ class PhoneViews extends EventEmitter {
 
   close(id) {
     const v = this.views.get(id);
-    if (v && v.win && !v.win.isDestroyed()) v.win.close();
+    if (!v || !v.win || v.win.isDestroyed()) return;
+    v.ending = true;
+    v.win.close();
   }
 
   closeAll() {
@@ -191,7 +247,7 @@ class PhoneViews extends EventEmitter {
     return [...this.views.values()].some((v) => v.kind === 'screen' && v.session && v.session.opts.audio);
   }
 
-  _open({ kind, app, title, width, height, opts, hidden = false, virtual = false }) {
+  _open({ kind, app, title, width, height, opts, hidden = false }) {
     if (!this.bridge.serial && kind !== 'netsound') {
       // Through Bluetooth: the phone's hotspot first (main.js), then this window.
       if (this.onNoAdb && this.onNoAdb({ kind, app, title, width, height, opts, hidden })) return;
@@ -203,16 +259,26 @@ class PhoneViews extends EventEmitter {
       titleBarStyle: 'hiddenInset', backgroundColor: '#000000',
       webPreferences: { preload: path.join(__dirname, 'preload-phoneview.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
     });
-    const v = { id, kind, app, title, win, session: null, keys: new KeyState(), size: null, ready: false, queue: [], screenOff: false, eaten: new Set(), virtual };
+    const v = { id, kind, app, title, win, session: null, keys: new KeyState(), size: null, ready: false, queue: [], screenOff: false, eaten: new Set() };
     this._send(v, 'phoneview:opts', this._opts(v));
     this.views.set(id, v);
     if (kind === 'app') setImmediate(() => this._stubs());
-    win.loadFile(path.join(__dirname, 'phoneview.html'), { query: { kind, title, vcam: virtual ? '1' : '0' } });
+    win.loadFile(path.join(__dirname, 'phoneview.html'), { query: { kind, title } });
     if (!hidden) win.once('ready-to-show', () => win.show());
     win.webContents.once('did-finish-load', () => {
       v.ready = true;
       for (const [ch, m] of v.queue.splice(0)) win.webContents.send(ch, m);
     });
+    // A camera's window: closed, it only hides (the camera stops with Camera's switch).
+    if (kind === 'camera') {
+      win.on('close', (e) => {
+        if (v.ending || quitting) return;
+        e.preventDefault();
+        win.hide();
+        this.emit('change');
+      });
+      win.on('show', () => this.emit('change'));
+    }
     win.on('closed', () => {
       if (v.swipeTimer) clearInterval(v.swipeTimer);
       if (v.screenOff && v.session && !v.session.closed) {
@@ -248,7 +314,14 @@ class PhoneViews extends EventEmitter {
     });
     s.on('video', (p) => this._send(v, 'phoneview:video', p));
     s.on('audio', (p) => !p.config && this._send(v, 'phoneview:audio', p.data));
-    s.on('closed', (why) => this._send(v, 'phoneview:status', { closed: why }));
+    s.on('closed', (why) => {
+      if (v.session !== s) return; // one a flip replaced
+      this._send(v, 'phoneview:status', { closed: why });
+      if (v.kind === 'camera' && why !== 'stopped') {
+        v.error = why;
+        this.emit('change');
+      }
+    });
     await s.start();
     if (v.app) setTimeout(() => s.startApp(v.app), 300);
     this._send(v, 'phoneview:status', { ready: true, via });
@@ -352,9 +425,7 @@ class PhoneViews extends EventEmitter {
         break;
       case 'cameraSwitch': { // the other camera: a session of its own
         if (v.kind !== 'camera') break;
-        const facing = this.cameraFacing === 'front' ? 'back' : 'front';
-        this.close(v.id);
-        this.openCamera({ facing });
+        this._flip(v, v.facing === 'front' ? 'back' : 'front');
         break;
       }
       case 'resize': // an app window changed size: its virtual display follows (flex)

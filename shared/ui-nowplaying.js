@@ -7,6 +7,24 @@
 // sound here (Bluetooth) (state.btAudio from shared/btaudio.js; null where it can't be: the Mac).
 'use strict';
 
+// General › Media controls on Overview: the same setting as the Audio tab's, there with or without a
+// phone connected. UI.mediaControlsRow() → {el, update(state)}.
+UI.mediaControlsRow = () => {
+  const sw = UI.switch((v) => UI.api.setAudio({ phoneMedia: v }), { label: 'Media controls on Overview' });
+  const row = UI.row('Media controls on Overview', '', [sw]);
+  return {
+    el: row,
+    update(s) {
+      const on = (s.audio || {}).phoneMedia !== false;
+      sw.set(on);
+      const m = s.phoneMedia;
+      row.setHint(on && m && m.why === 'listener'
+        ? 'Needs the full TwinDesk app on the phone, with its notification access on'
+        : 'What plays on a connected phone, with Play, Pause, Next and Previous, on Overview while it plays');
+    },
+  };
+};
+
 UI.phoneAudioCard = () => {
   const { el, api } = UI;
   const bt = UI.switch((v) => api.setAudio({ phoneBt: v }), { label: 'Play phone sound here (Bluetooth)' });

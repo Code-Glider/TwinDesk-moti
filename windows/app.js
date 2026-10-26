@@ -13,7 +13,7 @@
 
   // Sidebar groups: no headings, one icon column, a small gap
   // between groups; General sits below a line.
-  const GROUP = { overview: 0, calls: 0.5, messages: 0.5, media: 0.5, 'mac-pc': 1, 'pc-mac': 1, cursor: 2, keyboard: 2, clipboard: 3, notifications: 3, files: 3, terminal: 4, audio: 4, camera: 4, apps: 4 };
+  const GROUP = { overview: 0, calls: 0.5, messages: 0.5, media: 0.5, 'mac-pc': 1, 'pc-mac': 1, cursor: 2, remote: 2, keyboard: 2, clipboard: 3, notifications: 3, files: 3, terminal: 4, audio: 4, camera: 4, apps: 4 };
   let lastGroup;
   let gap = null; // the gap before the current group (hidden with the group: renderSidebar)
   for (const def of UI.tabs.slice().sort((a, b) => (a.order ?? 50) - (b.order ?? 50))) {

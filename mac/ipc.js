@@ -18,7 +18,7 @@ const SETTINGS_URLS = {
   location: 'x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices',
   extensions: 'x-apple.systempreferences:com.apple.ExtensionsPreferences?Sharing',
 };
-const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'share', 'receive', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'apps', 'multi', 'general', 'about'];
+const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'share', 'receive', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'remote', 'apps', 'multi', 'general', 'about'];
 
 const bool = (v) => !!v;
 const clamp = (lo, hi, dflt) => (v) => {
@@ -466,7 +466,7 @@ function setupIpc(ctx) {
         const st = systemPreferences.getMediaAccessStatus('camera');
         return st === 'granted' || (st === 'not-determined' && systemPreferences.askForMediaAccess('camera'));
       };
-      if (m.do === 'view') c.view();
+      if (m.do === 'view') c.view(m.show === true); // show: its window too
       else if (m.do === 'close') c.closeView();
       else if (m.do === 'share') c.setShare(m.on === true, allowed);
       else if (m.do === 'device') c.setDevice(m.id);
@@ -475,6 +475,13 @@ function setupIpc(ctx) {
       // Camera › Virtual camera (shared/vcam.js).
       else if (m.do === 'virtual' && ctx.vcam) ctx.vcam.setOn(m.on === true);
       else if (m.do === 'vcamRemove' && ctx.vcam) ctx.vcam.remove();
+      else if (m.do === 'rotate' && ctx.vcam) ctx.vcam.turn();
+    },
+    // Remote tab: the phone's Remote page here (shared/phone-remote.js).
+    setRemote(m) {
+      if (!m || typeof m !== 'object' || !ctx.phoneRemote) return;
+      ctx.phoneRemote.setAllow(m.allow === true);
+      save();
     },
     // "Share sound with the screen" (Display › Mac → PC).
     setScreenSound(on) {

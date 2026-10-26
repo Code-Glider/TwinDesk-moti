@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('macshare', {
   onGo: (fn) => ipcRenderer.on('go', (_e, tab) => fn(tab)),
   hub: call('hub'), // Calls, Messages and Photos (shared/phonehub.js)
   onHub: (fn) => ipcRenderer.on('hub', (_e, m) => fn(m)), // the phone's answers for them
+  onCamPreview: (fn) => ipcRenderer.on('vcam:preview', (_e, buf) => fn(buf)), // Camera › the picture (a JPEG)
   pair: call('pair'),
   connectAddress: call('connectAddress'),
   refreshFound: call('refreshFound'),
@@ -47,6 +48,7 @@ contextBridge.exposeInMainWorld('macshare', {
   phoneMedia: call('phoneMedia'),
   phoneBtPick: call('phoneBtPick'),
   setTerminal: call('setTerminal'),
+  setRemote: call('setRemote'), // Remote tab (shared/phone-remote.js)
   openTerminal: call('openTerminal'),
   setupSshd: call('setupSshd'),
   setFiles: call('setFiles'),

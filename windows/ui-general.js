@@ -45,6 +45,7 @@ UI.tab({
     const btPill = el('span', { class: 'pill' });
     const btRow = UI.row('Bluetooth', 'For a phone or computer that isn’t on this network', [btPill, UI.button('Open', () => api.openBluetoothSettings(), 'small')]);
     const locRow = UI.row('Location', 'To join a phone’s or computer’s Wi-Fi Direct (Windows shows Wi-Fi networks only with it)', [UI.button('Open', () => api.netLocation(), 'small')]);
+    const media = UI.mediaControlsRow(); // a phone's media controls on Overview (shared/ui-nowplaying.js)
     const deviceName = el('span', { class: 'value' });
     const deviceRow = UI.row('Computer name', 'How other computers see this one', [deviceName]);
 
@@ -52,6 +53,7 @@ UI.tab({
       UI.card('App', [
         UI.row('Start with Windows', '', [startup]),
         UI.row('Show a popup when switching', 'When the mouse and keyboard move between computers', [hudSw]),
+        media.el,
         recvRow,
       ]),
       UI.card('Permissions', [fwRow, btRow, locRow]),
@@ -60,6 +62,7 @@ UI.tab({
     );
 
     return (s) => {
+      media.update(s);
       startup.set(s.startup);
       hudSw.set(s.app.hud);
       const f = s.files || {};

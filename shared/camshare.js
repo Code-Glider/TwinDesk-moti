@@ -5,12 +5,12 @@
 // and sends it over WebRTC (cam.offer / answer / ice through the session, the picture straight
 // between the two); a popup says so while it does, and it stops when the window there closes, the
 // switch goes off, Stop is pressed or the session ends. Not through Bluetooth (no path for the
-// picture). The window here shows the other's camera (camera-view.html); with Camera › Virtual
-// camera on (virtual()), it stays hidden and the picture goes to a camera other apps can pick
-// (shared/vcam.js).
+// picture). Here the other's camera opens in a hidden window (camera-view.html) whose picture goes
+// to the Camera tab and, with Virtual camera on, to a camera other apps can pick (shared/vcam.js);
+// Camera › Window shows it.
 //
 // link: {on(type, fn), send(msg), connected(), ble(), closed(fn)}; cfg() → settings.camera; save();
-// popup(kind, text); peerName(); onChange(); virtual() → the virtual camera takes the picture.
+// popup(kind, text); peerName(); onChange().
 // Events: none (onChange).
 'use strict';
 
@@ -20,10 +20,12 @@ const P = require('./protocol.js');
 const T = P.T;
 
 class CamShare {
-  constructor({ link, cfg, save, popup, peerName, onChange, virtual = () => false }) {
-    Object.assign(this, { link, cfg, save, popup, peerName, onChange, virtual });
-    const { BrowserWindow, ipcMain } = require('electron');
+  constructor({ link, cfg, save, popup, peerName, onChange }) {
+    Object.assign(this, { link, cfg, save, popup, peerName, onChange });
+    const { app, BrowserWindow, ipcMain } = require('electron');
     this.BrowserWindow = BrowserWindow;
+    this.quitting = false; // the window's close hides it, but not on quit
+    app.on('before-quit', () => { this.quitting = true; });
     this.peerShares = false; // the other computer's cam.policy
     this.sender = null; // {win, ready, queue, status}: our camera going to the other computer
     this.viewer = null; // {win, ready, queue, status, error}: theirs here
@@ -169,32 +171,35 @@ class CamShare {
 
   // ---- theirs, here ----
 
-  // The other computer's camera in a window here, or in the virtual camera (a hidden window).
-  view() {
+  // The other computer's camera here (Camera's switch): its window opens hidden, the picture goes to
+  // the Camera tab and the virtual camera (shared/vcam.js); show: the window too (Camera › Window).
+  // Closing that window only hides it: the camera stops with the switch.
+  view(show = false) {
     if (!this.link.connected()) return this.popup('home', 'Not connected');
-    const virtual = !!this.virtual();
-    if (this.viewer && !this.viewer.win.isDestroyed() && this.viewer.virtual === virtual) {
-      if (!virtual) {
-        this.viewer.win.show();
-        this.viewer.win.focus();
+    const old = this.viewer;
+    if (old && !old.win.isDestroyed()) {
+      if (show) {
+        old.win.show();
+        old.win.focus();
       }
-      if (this.viewer.status === 'ended' || this.viewer.status === 'refused' || this.viewer.status === 'failed') this._ask();
+      if (old.status === 'ended' || old.status === 'refused' || old.status === 'failed') this._ask();
       return;
-    }
-    // Open the other way: that one goes first (quietly: the new one asks again).
-    if (this.viewer && !this.viewer.win.isDestroyed()) {
-      const old = this.viewer;
-      this.viewer = null;
-      old.win.close();
     }
     const name = this.peerName();
     const win = new this.BrowserWindow({
       width: 854, height: 520, minWidth: 240, minHeight: 160, title: `${name}’s camera`, backgroundColor: '#000000', autoHideMenuBar: true, show: false,
-      webPreferences: { preload: path.join(__dirname, 'preload-camera.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: !virtual },
+      webPreferences: { preload: path.join(__dirname, 'preload-camera.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
     });
-    const v = this.viewer = { win, ready: false, queue: [], status: '', error: '', virtual };
-    win.loadFile(path.join(__dirname, 'camera-view.html'), { query: { name, vcam: virtual ? '1' : '0' } });
-    if (!virtual) win.once('ready-to-show', () => win.show());
+    const v = this.viewer = { win, ready: false, queue: [], status: '', error: '', ending: false };
+    win.loadFile(path.join(__dirname, 'camera-view.html'), { query: { name } });
+    if (show) win.once('ready-to-show', () => win.show());
+    win.on('close', (e) => {
+      if (v.ending || this.quitting) return;
+      e.preventDefault();
+      win.hide();
+      this.onChange();
+    });
+    win.on('show', () => this.onChange());
     win.on('closed', () => {
       if (this.viewer !== v) return;
       this.viewer = null;
@@ -206,12 +211,10 @@ class CamShare {
   }
 
   closeView() {
-    if (this.viewer && !this.viewer.win.isDestroyed()) this.viewer.win.close();
-  }
-
-  // The virtual camera went on or off: what's open now opens the other way.
-  reopen() {
-    if (this.viewer && !this.viewer.win.isDestroyed() && this.viewer.virtual !== !!this.virtual()) this.view();
+    const v = this.viewer;
+    if (!v || v.win.isDestroyed()) return;
+    v.ending = true;
+    v.win.close();
   }
 
   _ask() {
@@ -266,7 +269,7 @@ class CamShare {
       sending: !!(this.sender && this.sender.status), // the other computer is viewing ours
       sendLive: !!(this.sender && this.sender.status === 'live'),
       viewing: !!this.viewer,
-      viewVirtual: !!(this.viewer && this.viewer.virtual),
+      viewShown: !!(this.viewer && !this.viewer.win.isDestroyed() && this.viewer.win.isVisible()),
       viewStatus: this.viewer ? this.viewer.status : '',
       viewError: this.viewer ? this.viewer.error : '',
     };

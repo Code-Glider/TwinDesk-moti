@@ -52,7 +52,7 @@ const { PhoneDrive } = require('./phonedrive');
 const { Phone } = require('./phone');
 const { PhoneBridge } = require('./phone-bridge');
 const { PhoneViews } = require('./phoneview');
-const { PhoneRemote } = require('./phone-remote');
+const { PhoneRemote } = require('../shared/phone-remote.js');
 const { BleHost, BleGuest, BlePhones } = require('../shared/blepipe.js');
 const { wifiQuiet } = require('../shared/blepolicy.js');
 const { NetLink } = require('../shared/netlink.js');
@@ -101,7 +101,7 @@ let device = null;
 let screen = null;
 let clip = null;
 let camShare = null; // Camera tab: the cameras of the two computers (shared/camshare.js)
-let vcam = null; // Camera › Virtual camera: Show goes to a camera apps can pick (shared/vcam.js, vcam.js)
+let vcam = null; // Camera: the running camera's picture, to the tab and the virtual camera (shared/vcam.js, vcam.js)
 let nowPlaying = null; // what plays on the phone, for the Overview's media controls (shared/nowplaying.js)
 let btAudio = null; // the phone's sound here over Bluetooth (shared/btaudio.js)
 let helper = null;
@@ -129,7 +129,7 @@ let wired = null; // wired.js, with the phone
 let hostServer = null; // server.js, once the certificate exists
 let phone = null; // A phone as the peer: phone.js (its .bridge: phone-bridge.js)
 let phoneViews = null; // its screen and apps in windows here (phoneview.js)
-let phoneRemote = null; // its Remote page: touchpad, keyboard and gamepad here (phone-remote.js)
+let phoneRemote = null; // its Remote page: touchpad, keyboard and gamepad here (shared/phone-remote.js)
 let phoneDrive = null; // its storage as a drive here (phonedrive.js)
 let bleHost = null; // Bluetooth, for devices not on this network: we host (blepipe.js)
 let bleGuest = null; // … we connect to a host
@@ -192,7 +192,8 @@ function start() {
   clip = new Clip(link, () => settings.clipboard, pushState, { popup: (kind, text) => hud && hud.show(kind, text), peerName });
   // With a computer (a phone's camera is phoneview.js openCamera).
   const computer = () => link.status.state === 'connected' && !(link.current && link.current.os === P.OS.ANDROID);
-  vcam = new VirtualCam({ driver: require('./vcam'), cfg: () => settings.camera, save: saveSettings, onChange: pushState, onReady: reopenCameras });
+  // On or off, the phone's Camera page says so (phone-bridge.js).
+  vcam = new VirtualCam({ driver: require('./vcam'), cfg: () => settings.camera, save: saveSettings, onChange: pushState, onReady: () => phoneViews && phoneViews.bridge._tellPhone(), ui: () => mainWin });
   camShare = new CamShare({
     link: { on: (t, fn) => link.on(t, fn), send: (m) => link.send(m), connected: computer, ble: () => !!(link.current && link.current.transport === 'ble'), closed: (fn) => link.on('closed', fn) },
     cfg: () => settings.camera,
@@ -200,7 +201,6 @@ function start() {
     popup: (kind, text) => hud && hud.show(kind, text),
     peerName,
     onChange: pushState,
-    virtual: () => vcam.ready,
   });
   if (phoneViews) phoneViews.vcam = vcam; // the phone may have started first
   vcam.check();
@@ -245,6 +245,7 @@ function start() {
     if (mode === 'driving') hud.show('away', (kvm.keyboardOnly ? 'Typing on ' : 'Using ') + name);
     else if (mode === 'driven') hud.show('driven', name + ' is using {me}');
     else hud.show('home', 'Back on {me}');
+    if (phoneRemote) phoneRemote.refresh(); // the phone's Remote is taken only with the mouse at home
   };
   // Cursor lock: the popup goes where the pointer is (the other computer shows its own while we drive it).
   kvm.onLock = (on, mode) => {
@@ -333,7 +334,7 @@ function start() {
   });
   updates.start();
   const ipc = setupIpc({ link, discovery, screen, clip, kvm, terminal, sshd, fileDrop, smb, apps, sound, pcScreen, pcApps, peerApps, vdd, notifs, fileClip, wake, updates, settings, save: saveSettings, push: pushState, buildState,
-    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get camShare() { return camShare; }, get vcam() { return vcam; }, get nowPlaying() { return nowPlaying; }, get btAudio() { return btAudio; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
+    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get camShare() { return camShare; }, get vcam() { return vcam; }, get phoneRemote() { return phoneRemote; }, get nowPlaying() { return nowPlaying; }, get btAudio() { return btAudio; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
     get net() { return net; }, applyNet, joinHotspot,
     checkFirewall, fixFirewall, setStartup, onApp: updateTray });
   pairSync = new PairSync({ link, settings, save: saveSettings, set: ipc.set }); // Two-way switches per pair
@@ -435,7 +436,7 @@ function startPhone(server, pairing) {
   });
   btAudio.on('change', pushState);
   phoneViews.on('change', pushState);
-  phoneRemote = new PhoneRemote({ server: pl, helper, getSettings: () => settings, atHome: () => !kvm || kvm.mode === 'home' });
+  phoneRemote = new PhoneRemote({ server: pl, helper, getSettings: () => settings, atHome: () => !kvm || kvm.mode === 'home', onChange: pushState });
   viaWifi(phoneViews, 'openScreen', 'phone');
   viaWifi(phoneViews, 'openApp', 'phone');
   // On Wi-Fi after Bluetooth, wireless debugging takes a moment more: the window opens once it's up.
@@ -739,14 +740,6 @@ function openMacApp(id) {
 // ---- state ----
 
 let pushQueued = false;
-// The virtual camera went on or off: a camera open now reopens the other way (a window, or hidden
-// and in the camera).
-function reopenCameras() {
-  if (camShare) camShare.reopen();
-  const cam = phoneViews && [...phoneViews.views.values()].find((v) => v.kind === 'camera');
-  if (cam && !!cam.virtual !== vcam.ready) phoneViews.openCamera({ facing: cam.facing });
-}
-
 function pushState() {
   if (pushQueued) return;
   pushQueued = true;
@@ -837,6 +830,7 @@ function buildState() {
     clipboard: { ...settings.clipboard, ...clip.view },
     camera: camShare.state,
     vcam: vcam.view(),
+    remote: phoneRemote ? phoneRemote.view : null,
     phoneMedia: nowPlaying ? nowPlaying.view : null,
     btAudio: btAudio ? btAudio.view : null,
     ui: settings.ui,

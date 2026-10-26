@@ -61,6 +61,10 @@ class NowPlaying(core: Core) : Feature(core) {
         }
     }
 
+    // Notification access came on (NotifListener connected) while the computer asks: start for real
+    // (before, Android refused the sessions and it said "listener").
+    fun retry() = main.post { if (want && msm == null) start() }
+
     private fun stop() {
         want = false
         main.removeCallbacks(sendNow)

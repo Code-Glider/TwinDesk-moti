@@ -141,6 +141,7 @@ private enum class Tab(val title: String, val icon: ImageVector, val colors: Lis
     Notifications("Notifications", Ico.bell, grad(0xFFFF6961, 0xFFFF3B30), "Share"),
     Files("Files", Ico.files, grad(0xFF64D2FF, 0xFF0A84FF), "Share"),
     Sound("Sound", Ico.audio, grad(0xFFFF6482, 0xFFFF2D55), "More"),
+    Camera("Camera", Ico.camera, grad(0xFFBF5AF2, 0xFF8944AB), "More"),
     General("General", Ico.general, grad(0xFFAEAEB2, 0xFF636366), "bottom"),
     About("About", Ico.about, grad(0xFF64D2FF, 0xFF0A84FF), "bottom"),
 }
@@ -156,6 +157,7 @@ private fun isOn(core: Core, t: Tab): Boolean = when (t) {
     Tab.Clipboard -> core.sync.get("clipboard", "in") || core.sync.get("clipboard", "out")
     Tab.Notifications -> core.sync.get("notifs", "in") || core.sync.get("notifs", "out")
     Tab.Sound -> core.sync.get("audio", "in") || core.sync.get("audio", "out")
+    Tab.Camera -> core.adb.camera.on
     Tab.Calls -> core.hub.callsOn
     Tab.Messages -> core.hub.messagesOn
     Tab.Photos -> core.hub.mediaOn
@@ -349,6 +351,7 @@ private fun Page(core: Core, v: Int, tab: Tab, modifier: Modifier) {
                 Tab.Notifications -> NotificationsPage(core, v)
                 Tab.Files -> FilesPage(core, v)
                 Tab.Sound -> SoundPage(core, v)
+                Tab.Camera -> CameraPage(core, v)
                 Tab.General -> GeneralPage(core, v)
                 Tab.About -> AboutPage(core, v)
             }
@@ -802,6 +805,61 @@ fun openPcShare(ctx: android.content.Context) {
 
 // ---- Screen ----
 
+// This device's camera on the computer (its Camera tab: phoneview.js openCamera, over wireless
+// debugging): its picture in TwinDesk there, and with Virtual camera on there, a camera every app
+// there can pick ("TwinDesk Camera").
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CameraPage(core: Core, v: Int) {
+    @Suppress("UNUSED_EXPRESSION") v // redraw on every Core change (Compose skips unread parameters)
+    val host = core.host
+    val adb = core.adb
+    val cam = adb.camera
+    val name = them(core)
+    val canShow = adb.paired || adb.known
+    var facing by rememberSaveable { mutableStateOf("back") }
+    val shown = if (cam.on) cam.facing ?: facing else facing
+    PageHead(
+        "Camera",
+        "This device’s camera on $name: in TwinDesk there, and as a camera its apps can pick.",
+        master = if (host != null && (canShow || cam.on)) cam.on else null,
+        onMaster = { adb.cameraOnComputer(it, facing) },
+    )
+    if (host == null) return NotConnected(core, v)
+    MacCard("This camera on $name") {
+        MacRow(
+            "Camera",
+            if (cam.on) "Switching takes a moment" else "The one it starts with",
+            first = true,
+        ) {
+            SingleChoiceSegmentedButtonRow {
+                val sides = listOf("back" to "Back", "front" to "Front")
+                sides.forEachIndexed { i, (f, label) ->
+                    SegmentedButton(
+                        selected = shown == f,
+                        onClick = { facing = f; if (cam.on) adb.cameraOnComputer(true, f) },
+                        shape = SegmentedButtonDefaults.itemShape(i, sides.size),
+                    ) { Text(label) }
+                }
+            }
+        }
+        MacRow(
+            "On $name",
+            when {
+                !canShow -> "Needs wireless debugging: set it up from Overview"
+                cam.error.isNotEmpty() -> "It stopped: ${cam.error}"
+                cam.on && cam.virtual -> "Running as “TwinDesk Camera”: in Zoom, Teams or the browser there, choose only that one"
+                cam.on -> "In TwinDesk’s Camera page there. Its Virtual camera makes it a camera other apps can pick"
+                else -> "Off"
+            },
+        )
+    }
+    Note(
+        if (cam.virtual) "$name’s Virtual camera is on: apps there see this camera as “TwinDesk Camera”."
+        else "Turn on Virtual camera in TwinDesk’s Camera page on $name to use this camera as a real camera in its apps (Zoom, Teams, the browser…).",
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScreenPage(core: Core, v: Int) {
@@ -996,8 +1054,8 @@ private fun RemotePage(core: Core, v: Int) {
     val me = core.store.deviceName
     PageHead("Remote", "Use this device as $name’s touchpad and keyboard, or as a gamepad.")
     if (core.host == null) return NotConnected(core, v)
-    if (r.unsupported) Note("$name doesn’t take the remote yet: for now only TwinDesk on Windows does.", "warn")
-    else if (r.allowed == false) Note("$name doesn’t take input from here. On $name, turn on Cursor › “Use $me’s mouse and keyboard on $name”, or “Let $me Control $name” in its tray menu.", "warn")
+    if (r.unsupported) Note("$name doesn’t answer the remote: update TwinDesk there.", "warn")
+    else if (r.allowed == false) Note(r.why.ifEmpty { "$name doesn’t take input from here. On $name, turn on Remote in TwinDesk." }, "warn")
     val open = { mode: String -> ctx.startActivity(Intent(ctx, RemoteActivity::class.java).putExtra("mode", mode)) }
     MacCard {
         MacRow("Touchpad and keyboard", "Slide to move $name’s pointer, tap to click, hold to right click, two fingers to scroll. Keys and media keys too", first = true) {

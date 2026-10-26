@@ -78,6 +78,7 @@ object Proto {
         const val PHONE_WAKE = "phone.wake"
         const val PHONE_AWAKE = "phone.awake"
         const val PHONE_MIRROR = "phone.mirror"
+        const val PHONE_CAMERA = "phone.camera"
         const val PHONE_SOUND_WANT = "phone.sound.want"
         const val PHONE_SOUND = "phone.sound"
         const val PHONE_SOUND_STATE = "phone.sound.state"

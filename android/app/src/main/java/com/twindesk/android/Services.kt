@@ -52,6 +52,11 @@ class NotifListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         runCatching { Core.get(this).notifs.posted(sbn) }
     }
+
+    // Allowed now (or Android started it again): the computer's media controls can see what plays.
+    override fun onListenerConnected() {
+        runCatching { Core.get(this).nowPlaying.retry() }
+    }
 }
 
 class ActionReceiver : BroadcastReceiver() {

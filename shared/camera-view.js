@@ -1,6 +1,7 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
 // The viewer (camera-view.html): the other computer's camera, answered recvonly to its offer.
-// With vcam=1 the window is hidden and its frames go to the virtual camera (shared/vcam-feed.js).
+// It opens hidden: its picture goes to the Camera tab, and to the virtual camera while that's on
+// (shared/vcam-feed.js); Camera › Window shows it. Camera › Rotate turns it here too.
 'use strict';
 
 const api = window.cam;
@@ -8,13 +9,26 @@ const video = document.getElementById('video');
 const status = document.getElementById('status');
 const again = document.getElementById('again');
 const mirror = document.getElementById('mirror');
-const query = new URLSearchParams(location.search);
-const name = query.get('name') || 'the other computer';
-const feed = query.get('vcam') === '1' && window.VcamFeed ? window.VcamFeed((buf) => api.vcam(buf)) : null;
+const name = new URLSearchParams(location.search).get('name') || 'the other computer';
+const feed = window.CamOut ? window.CamOut() : null;
 let pc = null;
 let pending = [];
 
-// Each frame of the track to the virtual camera, as it comes (a hidden window paints none).
+// Turned: the video sideways is as tall as the window is wide.
+let turn = 0;
+function place() {
+  const side = turn % 180 !== 0;
+  const w = innerWidth, h = innerHeight;
+  Object.assign(video.style, {
+    position: 'absolute', left: '50%', top: '50%',
+    width: `${side ? h : w}px`, height: `${side ? w : h}px`,
+    transform: `translate(-50%, -50%) rotate(${turn}deg)${document.body.classList.contains('mirror') ? ' scaleX(-1)' : ''}`,
+  });
+}
+if (feed) feed.onRotate((deg) => { turn = deg; place(); });
+addEventListener('resize', place);
+
+// Each frame of the track onward, as it comes (a hidden window paints none).
 async function feedTrack(track) {
   if (!feed) return;
   if (typeof MediaStreamTrackProcessor === 'function') {
@@ -89,5 +103,5 @@ api.on((m) => {
   }
 });
 again.onclick = () => api.send({ t: 'again' });
-mirror.onclick = () => mirror.classList.toggle('on', document.body.classList.toggle('mirror'));
+mirror.onclick = () => { mirror.classList.toggle('on', document.body.classList.toggle('mirror')); place(); };
 api.send({ t: 'ready' });

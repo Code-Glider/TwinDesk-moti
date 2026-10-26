@@ -178,6 +178,10 @@ class Adb(core: Core) : Feature(core) {
     // Xiaomi: “USB debugging (Security settings)” is off, so the computer's touches and keys are refused.
     @Volatile var inputBlocked = false; private set
     @Volatile var viewed = false; private set // the computer shows this phone's screen or an app (scrcpy) now
+    // This phone's camera running on the computer (the Camera page): which one, why it stopped, and
+    // whether the computer's Virtual camera takes it (adb.bridge's camera).
+    data class Camera(val on: Boolean = false, val facing: String? = null, val error: String = "", val virtual: Boolean = false)
+    @Volatile var camera = Camera(); private set
     val paired get() = bridge == "ready"
     // The computer reached wireless debugging here before: its pairing stays (Settings lists it),
     // so while it reconnects (after MIUI switches wireless debugging off on a screen lock, at a new
@@ -365,6 +369,7 @@ class Adb(core: Core) : Feature(core) {
 
     override fun onClosed() {
         viewed = false
+        camera = Camera()
         stopConnectWatch()
         main.post { check() }
         scheduleAutoOff()
@@ -380,6 +385,9 @@ class Adb(core: Core) : Feature(core) {
                 canPair = m.optBoolean("canPair", false)
                 inputBlocked = m.optBoolean("inputBlocked", false)
                 viewed = m.optBoolean("viewed", false)
+                camera = m.optJSONObject("camera")?.let { c ->
+                    Camera(c.optBoolean("on"), c.optString("facing").takeIf { it == "back" || it == "front" }, c.optString("error"), c.optBoolean("virtual"))
+                } ?: Camera()
                 if (pairing && bridge != "connecting") {
                     pairing = false
                     if (bridge == "ready") Notify.pairResult(core.ctx, "Paired with ${core.host?.name ?: "your computer"}", "Its screen, mouse, keyboard and sound work with this device now.", false)
@@ -407,6 +415,12 @@ class Adb(core: Core) : Feature(core) {
     // it over wireless debugging, moving to Wi-Fi first when on Bluetooth), or its windows there closed.
     fun showOnComputer(open: Boolean) {
         core.send(msg(Proto.T.PHONE_MIRROR, "open" to open))
+    }
+
+    // The Camera page: this phone's camera running on the computer (back or front; another facing
+    // while it runs switches it there), or stopped. Over wireless debugging, like the screen.
+    fun cameraOnComputer(open: Boolean, facing: String = "back") {
+        core.send(msg(Proto.T.PHONE_CAMERA, "open" to open, "facing" to facing))
     }
 
     fun sendPairCode(code: String) {

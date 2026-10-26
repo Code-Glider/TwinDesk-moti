@@ -9,7 +9,14 @@ contextBridge.exposeInMainWorld('phoneview', {
     if (['size', 'video', 'audio', 'netaudio', 'status', 'opts'].includes(ch)) ipcRenderer.on(`phoneview:${ch}`, (_e, m) => fn(m));
   },
   send: (m) => ipcRenderer.send('phoneview:in', m),
-  vcam: (buf) => ipcRenderer.send('vcam:frame', buf), // a camera's frames to the virtual camera (shared/vcam.js)
   // files: an array of File (a FileList reaches this side of the bridge as a plain object, which can't be iterated)
   drop: (files) => ipcRenderer.send('phoneview:drop', [...files].map((f) => { try { return webUtils.getPathForFile(f); } catch { return ''; } }).filter(Boolean)),
+});
+
+// A camera's picture to the Camera tab and the virtual camera (shared/vcam-feed.js, shared/vcam.js).
+contextBridge.exposeInMainWorld('camout', {
+  hello: () => ipcRenderer.send('vcam:hello'),
+  frame: (buf) => ipcRenderer.send('vcam:frame', buf),
+  preview: (buf) => ipcRenderer.send('vcam:preview', buf),
+  on: (fn) => ipcRenderer.on('vcam:set', (_e, m) => fn(m)),
 });

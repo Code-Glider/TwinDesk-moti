@@ -53,6 +53,7 @@ UI.tab({
     const shareRow = UI.row('TwinDesk in the Share menu', 'Share › TwinDesk sends files to the other computer',
       [UI.button('Extensions…', () => api.openSettings('extensions'), 'small')]);
 
+    const media = UI.mediaControlsRow(); // a phone's media controls on Overview (shared/ui-nowplaying.js)
     body.append(
       UI.card('Permissions', [
         ...perms.map((x) => x.row),
@@ -62,12 +63,14 @@ UI.tab({
         UI.row('Open at login', '', [loginSw]),
         UI.row('Keep the display awake', 'While connected', [awakeSw]),
         UI.row('Show a popup when switching', 'When the mouse and keyboard move between computers', [hudSw]),
+        media.el,
       ]),
       UI.card('Network and sharing', [bleRow, blePcRow, bleWifiRow, wakeRow, shareRow]),
       UI.card('This computer', [deviceRow, helperRow]),
     );
 
     return (s) => {
+      media.update(s);
       for (const { p, pill } of perms) {
         const v = p.state ? p.state(s) : s.permissions[p.kind];
         const ok = p.kind === 'screen' ? v === 'granted' : v === true;

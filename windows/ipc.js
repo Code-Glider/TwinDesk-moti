@@ -106,7 +106,7 @@ function setupIpc(ctx) {
   handle('camera', (m) => {
     const c = ctx.camShare;
     if (!c || !m || typeof m !== 'object') return;
-    if (m.do === 'view') c.view();
+    if (m.do === 'view') c.view(m.show === true); // show: its window too
     else if (m.do === 'close') c.closeView();
     else if (m.do === 'share') c.setShare(m.on === true);
     else if (m.do === 'device') c.setDevice(m.id);
@@ -115,6 +115,13 @@ function setupIpc(ctx) {
     // Camera › Virtual camera (shared/vcam.js).
     else if (m.do === 'virtual' && ctx.vcam) ctx.vcam.setOn(m.on === true);
     else if (m.do === 'vcamRemove' && ctx.vcam) ctx.vcam.remove();
+    else if (m.do === 'rotate' && ctx.vcam) ctx.vcam.turn();
+  });
+  // Remote tab: the phone's Remote page here (shared/phone-remote.js).
+  handle('setRemote', (m) => {
+    if (!m || typeof m !== 'object' || !ctx.phoneRemote) return;
+    ctx.phoneRemote.setAllow(m.allow === true);
+    ctx.save();
   });
   handle('setTerminal', (partial) => {
     const p = partial && typeof partial === 'object' ? { enabled: partial.enabled, allowMac: partial.allowMac } : {};

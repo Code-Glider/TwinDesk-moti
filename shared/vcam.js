@@ -1,16 +1,19 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
-// Camera › Virtual camera (Windows, Mac and Linux): what Show starts — the other computer's
-// camera, or a phone's — goes to a camera every app on this computer can pick ("TwinDesk Camera"),
-// not to a window. Off until turned on; turning it on installs the camera the first time (each
-// platform's driver: windows/vcam.js, linux/vcam.js, mac/vcam.js), and while it's on the camera's
-// window stays hidden and sends its frames here (shared/vcam-feed.js: NV12, 1280×720, on
-// 'vcam:frame'), which go to the driver's feed process. Without frames the camera shows black.
+// Where a running camera's picture goes (Windows, Mac and Linux). Its window (the other computer's
+// camera, or a phone's) is hidden and sends the picture on (shared/vcam-feed.js): to the Camera tab
+// ('vcam:preview', a small JPEG, passed to ui()), and while Virtual camera is on to a camera every
+// app on this computer can pick ("TwinDesk Camera": NV12, 1280×720, on 'vcam:frame', to the
+// driver's feed process; black without frames). The windows say hello and are told what to do
+// ('vcam:set' {vcam, rotate}). Virtual camera is off until turned on; turning it on installs the
+// camera the first time (each platform's driver: windows/vcam.js, linux/vcam.js, mac/vcam.js).
+// Camera › Rotate (settings.camera.rotate, quarter turns) turns the picture everywhere.
 //
 // driver: {name, always?, check() → {supported, installed, message}, install(say), remove(), feed(onExit) → ChildProcess}
 //   say(text): what installing waits for now (the Mac: the person allowing it in System Settings).
 //   always: the feed runs all the while it's on (Linux: an apps sees the camera only while
 //   something writes to it), not only while frames come.
-// cfg() → settings.camera; save(); onChange(); onReady(ready): the camera's windows reopen the other way.
+// cfg() → settings.camera; save(); onChange(); onReady(ready): it's ready (on and installed) or not;
+// ui() → the main window (the tab's picture goes there).
 'use strict';
 
 const FRAME = 1280 * 720 * 3 / 2;
@@ -18,16 +21,55 @@ const IDLE_MS = 5000; // no frames this long: the feed process goes (it starts a
 const LIVE_MS = 2000;
 
 class VirtualCam {
-  constructor({ driver, cfg, save, onChange, onReady }) {
-    Object.assign(this, { driver, cfg, save, onChange, onReady });
+  constructor({ driver, cfg, save, onChange, onReady, ui = () => null }) {
+    Object.assign(this, { driver, cfg, save, onChange, onReady, ui });
     this.state = { checked: false, supported: !!driver, installed: false, busy: '', message: '' };
     this.proc = null;
     this.blocked = false; // the feed's pipe is full: frames drop until it drains
     this.lastFrame = 0;
     this.idle = null;
     this.wasReady = false;
+    this.sources = new Set(); // the camera windows' webContents
+    this.lastPreview = 0;
     const { ipcMain } = require('electron');
     ipcMain.on('vcam:frame', (_e, buf) => this.frame(buf));
+    ipcMain.on('vcam:hello', (e) => {
+      const wc = e.sender;
+      this.sources.add(wc);
+      wc.once('destroyed', () => this.sources.delete(wc));
+      this._tell(wc);
+    });
+    ipcMain.on('vcam:preview', (_e, buf) => {
+      const w = this.ui();
+      if (!buf || buf.byteLength > 2e6) return;
+      const was = this.lastPreview;
+      this.lastPreview = Date.now();
+      if (this.lastPreview - was > LIVE_MS) this.onChange(); // the tab's picture came
+      clearTimeout(this.pictureTimer);
+      this.pictureTimer = setTimeout(() => this.onChange(), LIVE_MS + 100); // …or stopped
+      if (w && !w.isDestroyed() && w.isVisible()) w.webContents.send('vcam:preview', buf);
+    });
+  }
+
+  get rotate() {
+    const r = this.cfg().rotate;
+    return [0, 90, 180, 270].includes(r) ? r : 0;
+  }
+
+  // Camera › Rotate: a quarter turn clockwise.
+  turn() {
+    this.cfg().rotate = (this.rotate + 90) % 360;
+    this.save();
+    this._tellAll();
+    this.onChange();
+  }
+
+  _tell(wc) {
+    if (!wc.isDestroyed()) wc.send('vcam:set', { vcam: this.ready, rotate: this.rotate });
+  }
+
+  _tellAll() {
+    for (const wc of this.sources) this._tell(wc);
   }
 
   get on() {
@@ -132,7 +174,7 @@ class VirtualCam {
     }
   }
 
-  // The camera's windows follow ready (the other way when it changes), and Linux's feed.
+  // The camera's windows feed the camera while it's ready; Linux's feed runs all that while.
   _sync() {
     const ready = this.ready;
     if (this.driver && this.driver.always) {
@@ -141,6 +183,7 @@ class VirtualCam {
     } else if (!ready) this._stopFeed();
     if (ready !== this.wasReady) {
       this.wasReady = ready;
+      this._tellAll();
       if (this.onReady) this.onReady(ready);
     }
   }
@@ -158,7 +201,9 @@ class VirtualCam {
       on: this.on,
       ready: this.ready,
       name: this.driver ? this.driver.name : '',
-      live: this.ready && Date.now() - this.lastFrame < LIVE_MS,
+      live: this.ready && Date.now() - this.lastFrame < LIVE_MS, // the virtual camera gets frames
+      picture: Date.now() - this.lastPreview < LIVE_MS, // the tab gets its picture
+      rotate: this.rotate,
     };
   }
 

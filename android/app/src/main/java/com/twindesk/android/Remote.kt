@@ -2,8 +2,8 @@
 // This device as the computer's remote (the Remote page): a touchpad and keyboard, or a gamepad
 // whose sticks and buttons press the computer's keys. RemoteActivity shows remote.html, which
 // sends remote.* straight to the computer; the computer moves its pointer and types while it lets
-// this device control it (remote.state says whether it does). Windows only for now: a Mac or
-// Linux doesn't answer, and the page says so.
+// this device control it (remote.state says whether it does, and why not). Windows, Mac and Linux;
+// an older TwinDesk on a Mac or Linux doesn't answer, and the page says so.
 package com.twindesk.android
 
 import android.content.pm.ActivityInfo
@@ -18,6 +18,7 @@ import java.util.Locale
 
 class Remote(core: Core) : Feature(core) {
     @Volatile var allowed: Boolean? = null; private set // the computer's last answer; null: not asked yet (or no answer)
+    @Volatile var why = ""; private set // why it doesn't take it now (the computer says), "" when it does
     @Volatile var active = false; private set // RemoteActivity is in front
     private var host: WebHost? = null
     private var mode = "pad"
@@ -35,8 +36,8 @@ class Remote(core: Core) : Feature(core) {
     val tapClick: Boolean get() = core.store.flag("remote.tapClick", true)
     fun setTapClick(on: Boolean) { core.store.setFlag("remote.tapClick", on); push() }
 
-    // A Mac or Linux computer doesn't take the remote yet (it never answers remote.hello).
-    val unsupported: Boolean get() = allowed == null && core.host?.os.let { it == "mac" || it == "linux" }
+    // An older TwinDesk on a Mac or Linux doesn't take the remote (it never answers remote.hello).
+    val unsupported: Boolean get() = allowed == null && active && core.host?.os.let { it == "mac" || it == "linux" }
 
     // What each gamepad control presses: a KeyboardEvent.code, "Mouse0/1/2" (left, right, middle), or "".
     fun padKey(id: String): String = overrides().optString(id, DEFAULTS[id] ?: "")
@@ -99,6 +100,7 @@ class Remote(core: Core) : Feature(core) {
     override fun onMessage(t: String, m: JSONObject): Boolean {
         if (t != Proto.T.REMOTE_STATE) return false
         allowed = m.optBoolean("allowed", false)
+        why = m.optString("why")
         host?.post(m)
         core.changed()
         return true

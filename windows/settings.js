@@ -5,7 +5,7 @@ const P = require('../shared/protocol.js');
 const CL = require('../shared/cursorlock.js');
 const { normalizeFolder } = require('../shared/received.js');
 
-const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'mac-pc', 'pc-mac', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'apps', 'multi', 'general', 'about'];
+const TABS = ['phone', 'overview', 'calls', 'messages', 'media', 'pfiles', 'mac-pc', 'pc-mac', 'cursor', 'keyboard', 'clipboard', 'notifications', 'files', 'mount', 'terminal', 'audio', 'camera', 'remote', 'apps', 'multi', 'general', 'about'];
 
 const OLD_TABS = { display: 'mac-pc', receive: 'mac-pc', share: 'pc-mac' }; // older names
 
@@ -93,12 +93,16 @@ function normalize(s) {
       pacing: mon.pacing === 'smooth' && (s.rev || 0) >= 8 ? 'smooth' : 'fast', // rev 8: back to Fastest once
       framegen: bool(mon.framegen, false), // in-between frames on the GPU (shared/framegen.js), off by default
     },
+    // Remote tab (shared/phone-remote.js): the phone's Remote page moves the pointer and types here
+    remote: { allow: bool((s.remote || {}).allow, true) },
     // Camera tab (shared/camshare.js): this computer's camera to the other one, off until turned
-    // on; device: which camera (a deviceId), '' = the default one; virtual: what Show opens goes to
-    // the virtual camera (shared/vcam.js), off until turned on
+    // on; device: which camera (a deviceId), '' = the default one; virtual: the running camera's
+    // picture also goes to the virtual camera (shared/vcam.js), off until turned on; rotate: its
+    // picture turned clockwise (0, 90, 180, 270)
     camera: {
       share: bool((s.camera || {}).share, false),
       virtual: bool((s.camera || {}).virtual, false),
+      rotate: [0, 90, 180, 270].includes((s.camera || {}).rotate) ? s.camera.rotate : 0,
       device: typeof (s.camera || {}).device === 'string' ? s.camera.device.slice(0, 200) : '',
     },
     audio: {
