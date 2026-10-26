@@ -1,6 +1,6 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
-// What plays on the connected phone, for the Overview's media controls (ui-nowplaying.js): asked of
-// the phone while Audio › Media controls on Overview is on (phone.media.want), its answer kept
+// What plays on the connected phone, for the Phone page's media controls (ui-nowplaying.js): asked of
+// the phone while Audio › Media controls on the Phone page is on (phone.media.want), its answer kept
 // (phone.media, NowPlaying.kt), and Play, Pause, Next, Previous and Seek sent back.
 // server: the phone link ('client', 'closed', 't:<type>', sendToClient); cfg() → settings.audio.
 // Events: 'change'.
@@ -30,15 +30,16 @@ class NowPlaying extends EventEmitter {
     server.on(`t:${T.PHONE_MEDIA}`, (m, ctx) => isPhone(ctx) && this._got(m || {}));
   }
 
-  get on() {
+  // Not "on": that would hide EventEmitter's on(), and nothing could listen (it broke the PC's phone setup).
+  get enabled() {
     return this.cfg().phoneMedia !== false;
   }
 
   // The setting changed, or a phone came: ask for it, or stop.
   apply() {
     if (!isPhone(this.server.current)) return;
-    this.server.sendToClient({ t: T.PHONE_MEDIA_WANT, on: this.on });
-    if (!this.on) this.now = null;
+    this.server.sendToClient({ t: T.PHONE_MEDIA_WANT, on: this.enabled });
+    if (!this.enabled) this.now = null;
     this.emit('change');
   }
 
@@ -64,11 +65,11 @@ class NowPlaying extends EventEmitter {
     this.server.sendToClient({ t: T.PHONE_MEDIA_CTL, a, ...(a === 'seek' ? { pos: Math.max(0, Math.round(num(pos))) } : {}) });
   }
 
-  // For the Overview: while it plays, and a few minutes after a pause (so it can go on again).
+  // For the Phone page: while it plays, and a few minutes after a pause (so it can go on again).
   get view() {
     const n = this.now;
-    const show = !!n && this.on && (n.playing || Date.now() - this.lastPlay < 5 * 60000);
-    return { on: this.on, why: this.why, now: show ? n : null };
+    const show = !!n && this.enabled && (n.playing || Date.now() - this.lastPlay < 5 * 60000);
+    return { on: this.enabled, why: this.why, now: show ? n : null };
   }
 }
 

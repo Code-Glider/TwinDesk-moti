@@ -1,17 +1,17 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
-// The phone's media controls on the Overview (Mac, PC and Linux), in the connected phone's card:
+// The phone's media controls (Mac, PC and Linux), on the right of the Phone page's card:
 // what plays there (its art, title, artist and app), Previous, Play/Pause, Next and where it is,
-// only while something plays (and a few minutes after a pause). Audio › Media controls on Overview
+// only while something plays (and a few minutes after a pause). Audio › Media controls on the Phone page
 // turns it off. UI.nowPlaying() → {el, update(state)}; state.phoneMedia from shared/nowplaying.js.
 // UI.phoneAudioCard() → {el, update(state)}: the Audio tab's phone rows, that switch and Play phone
 // sound here (Bluetooth) (state.btAudio from shared/btaudio.js; null where it can't be: the Mac).
 'use strict';
 
-// General › Media controls on Overview: the same setting as the Audio tab's, there with or without a
+// General › Media controls on the Phone page: the same setting as the Audio tab's, there with or without a
 // phone connected. UI.mediaControlsRow() → {el, update(state)}.
 UI.mediaControlsRow = () => {
-  const sw = UI.switch((v) => UI.api.setAudio({ phoneMedia: v }), { label: 'Media controls on Overview' });
-  const row = UI.row('Media controls on Overview', '', [sw]);
+  const sw = UI.switch((v) => UI.api.setAudio({ phoneMedia: v }), { label: 'Media controls on the Phone page' });
+  const row = UI.row('Media controls on the Phone page', '', [sw]);
   return {
     el: row,
     update(s) {
@@ -20,7 +20,7 @@ UI.mediaControlsRow = () => {
       const m = s.phoneMedia;
       row.setHint(on && m && m.why === 'listener'
         ? 'Needs the full TwinDesk app on the phone, with its notification access on'
-        : 'What plays on a connected phone, with Play, Pause, Next and Previous, on Overview while it plays');
+        : 'What plays on a connected phone, with Play, Pause, Next and Previous, on the Phone page while it plays');
     },
   };
 };
@@ -31,8 +31,8 @@ UI.phoneAudioCard = () => {
   const btRow = UI.row('Play phone sound here (Bluetooth)', '', [bt]);
   const pick = UI.select([], (id) => api.phoneBtPick(id));
   const pickRow = UI.row('The phone', 'Paired with this computer over Bluetooth', [pick]);
-  const media = UI.switch((v) => api.setAudio({ phoneMedia: v }), { label: 'Media controls on Overview' });
-  const mediaRow = UI.row('Media controls on Overview', '', [media]);
+  const media = UI.switch((v) => api.setAudio({ phoneMedia: v }), { label: 'Media controls on the Phone page' });
+  const mediaRow = UI.row('Media controls on the Phone page', '', [media]);
   const card = UI.card('{name}', [btRow, pickRow, mediaRow]);
   return {
     el: card,
@@ -56,7 +56,7 @@ UI.phoneAudioCard = () => {
       const m = s.phoneMedia;
       mediaRow.setHint(m && m.why === 'listener' && a.phoneMedia !== false
         ? 'Needs the full TwinDesk app on {name}, with its notification access on'
-        : 'What plays on {name}, with Play, Pause, Next and Previous, in its card on Overview while it plays');
+        : 'What plays on {name}, with Play, Pause, Next and Previous, on the Phone page while it plays');
     },
   };
 };

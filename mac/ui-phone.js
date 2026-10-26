@@ -31,12 +31,15 @@ UI.tab({
       { value: 'adb', label: 'ADB', title: 'Wireless debugging: full control' },
       { value: 'phone', label: 'Accessibility', title: 'TwinDesk on the phone taps and types itself, over Wi-Fi, Wi-Fi Direct or Bluetooth. No developer options' },
     ], (v) => api.setPhone({ input: v, inputPicked: true })); // picked: no longer automatic
+    // What plays on the phone, on the card's right, while it plays (shared/ui-nowplaying.js).
+    const media = UI.nowPlaying();
     const hero = el('div', { class: 'card hero phone-hero' }, [
       dev,
       el('div', { class: 'phone-hero-text' }, [
         name, sub,
         el('div', { class: 'phone-hero-actions' }, [showBtn, wifiBtn, hotspotBtn, discBtn]),
       ]),
+      media.el,
     ]);
 
     // ---- wireless debugging ----
@@ -109,6 +112,7 @@ UI.tab({
     };
 
     function render(s) {
+      media.update(s);
       const ph = s.phone || {};
       const c = ph.connected;
       const info = ph.info || {};

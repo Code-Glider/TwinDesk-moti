@@ -190,8 +190,9 @@ body.callpop {
 .cp:hover .cp-x { opacity: 1; }
 body.callpop.missed .cp-sub { color: var(--bad); }
 
-/* The phone's media controls on the Overview (ui-nowplaying.js): in the connected phone's card. */
+/* The phone's media controls (ui-nowplaying.js): on the right of the Phone page's card. */
 .np { display: flex; align-items: center; gap: 12px; margin: 14px 4px 2px; padding: 10px 12px; border-radius: 12px; background: var(--hover); text-align: left; }
+.phone-hero .np { margin: 0 0 0 auto; flex: 0 1 380px; min-width: 240px; }
 .np[hidden] { display: none; }
 .np-art { width: 52px; height: 52px; flex: none; border-radius: 8px; background: var(--track-off) center / cover no-repeat; }
 .np-art.none { background-image: linear-gradient(135deg, #bf5af2, #ff375f) !important; }

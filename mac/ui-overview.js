@@ -47,7 +47,6 @@ UI.tab({
     const peerName = el('div', { class: 'hero-name' });
     const macName = el('div', { class: 'hero-name' });
     const peerDev = el('div', { class: 'device pc' });
-    const nowPlaying = UI.nowPlaying();
     const status = el('div', { class: 'hero-status' });
     // The session: Disconnect it (a phone or a computer); Connect again to the Mac we're a guest of
     // after one, or Take over while another device has it.
@@ -66,7 +65,6 @@ UI.tab({
         el('div', { class: 'hero-mid' }, [linkLine, linkText]),
         el('div', { class: 'hero-device' }, [peerDev, peerName]),
       ]),
-      nowPlaying.el, // the phone's media controls, while it plays (shared/ui-nowplaying.js)
       status,
       sessionBtns,
       el('div', { class: 'hero-actions' }, [wifiBtn, hotspotBtn]),
@@ -185,7 +183,6 @@ UI.tab({
       if (UI.phoneWall && p.phone) peerDev.style.setProperty('--phone-wall', UI.phoneWall);
       else peerDev.style.removeProperty('--phone-wall');
       linkLine.className = `hero-link ${c ? 'up' : ''}`;
-      nowPlaying.update(s);
       const connecting = ['connecting', 'reconnecting'].includes(g.status.state);
       linkText.textContent = c ? `${c.rttMs != null ? `${c.rttMs} ms · ` : ''}${UI.via(s)}`
         : s.pairing || gp ? 'Pairing…' : connecting ? 'Connecting…' : 'Not connected';

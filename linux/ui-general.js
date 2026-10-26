@@ -55,7 +55,7 @@ UI.tab({
     const btPill = el('span', { class: 'pill' });
     const btRow = UI.row('Bluetooth', 'For a phone or computer that isn’t on this network', [btPill, UI.button('Open', () => api.openBluetoothSettings(), 'small')]);
 
-    const media = UI.mediaControlsRow(); // a phone's media controls on Overview (shared/ui-nowplaying.js)
+    const media = UI.mediaControlsRow(); // a phone's media controls on the Phone page (shared/ui-nowplaying.js)
     body.append(
       UI.card('App', [
         UI.row('Open at login', 'Starts in the tray', [startup]),

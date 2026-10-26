@@ -53,7 +53,7 @@ UI.tab({
     const shareRow = UI.row('TwinDesk in the Share menu', 'Share › TwinDesk sends files to the other computer',
       [UI.button('Extensions…', () => api.openSettings('extensions'), 'small')]);
 
-    const media = UI.mediaControlsRow(); // a phone's media controls on Overview (shared/ui-nowplaying.js)
+    const media = UI.mediaControlsRow(); // a phone's media controls on the Phone page (shared/ui-nowplaying.js)
     body.append(
       UI.card('Permissions', [
         ...perms.map((x) => x.row),

@@ -48,7 +48,8 @@ class BtAudio extends EventEmitter {
     });
   }
 
-  get on() {
+  // Not "on": that would hide EventEmitter's on(), and nothing could listen (it broke the PC's phone setup).
+  get enabled() {
     return this.cfg().phoneBt === true;
   }
 
@@ -59,7 +60,7 @@ class BtAudio extends EventEmitter {
   // The switch, a phone connecting or going: on with a phone there, off otherwise.
   async apply() {
     clearTimeout(this.timer);
-    if (!this.on || !this.connected) {
+    if (!this.enabled || !this.connected) {
       this.tries = 0;
       if (this.state !== 'off') {
         this._set('off'); // first: its 'closed' isn't a drop
@@ -75,7 +76,7 @@ class BtAudio extends EventEmitter {
       this.error = e.message;
       return this._set('unavailable');
     }
-    if (!this.on || !this.connected) return this.apply();
+    if (!this.enabled || !this.connected) return this.apply();
     const saved = this.cfg().phoneBtDevice || '';
     const name = String((this.phone && this.phone.name) || (this.server.current && this.server.current.name) || '').trim().toLowerCase();
     // Never just the first one: that may be another phone paired before.
@@ -117,7 +118,7 @@ class BtAudio extends EventEmitter {
     this._set('failed');
     const wait = RETRY_MS[this.tries++];
     clearTimeout(this.timer);
-    if (wait) this.timer = setTimeout(() => { if (this.on && this.connected) { this.state = 'off'; this.apply(); } }, wait);
+    if (wait) this.timer = setTimeout(() => { if (this.enabled && this.connected) { this.state = 'off'; this.apply(); } }, wait);
   }
 
   // Off now (the switch, quitting).
@@ -146,7 +147,7 @@ class BtAudio extends EventEmitter {
       unavailable: this.error || 'Bluetooth is off on this computer',
     };
     return {
-      on: this.on,
+      on: this.enabled,
       state: this.state,
       text: TEXT[this.state] || '',
       devices: this.state === 'choose' || this.state === 'playing' ? this.devices : [],
