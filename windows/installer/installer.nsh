@@ -62,7 +62,9 @@
   ${ifNot} ${isUpdated}
     nsExec::Exec '"$INSTDIR\resources\app\windows-helper\bin\twindesk-vcam.exe" remove'
     nsExec::Exec 'cmd /c for %f in ("%ProgramData%\TwinDesk\vcam\twindesk-vcam-*.dll") do "%SystemRoot%\System32\regsvr32.exe" /u /s "%f"'
-    RMDir /r "$COMMONPROGRAMDATA\TwinDesk\vcam"
+    ; $APPDATA for all users: ProgramData
+    SetShellVarContext all
+    RMDir /r "$APPDATA\TwinDesk\vcam"
   ${endIf}
   ; Calls on this PC: its package (this user's) and its certificate.
   nsExec::Exec 'powershell -NoProfile -NonInteractive -Command "Get-AppxPackage -Name TwinDesk.Calls | Remove-AppxPackage"'
