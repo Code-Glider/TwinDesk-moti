@@ -40,7 +40,7 @@ const SCHEMA = {
   app: { openAtLogin: bool, keepAwake: bool, hud: bool },
   mesh: { autoJoin: bool },
   updates: { auto: bool },
-  audio: { send: bool, receive: bool, muteLocal: bool, volume: clamp(0, 1, 1) },
+  audio: { send: bool, receive: bool, muteLocal: bool, volume: clamp(0, 1, 1), phoneMedia: bool },
   terminal: { allowPc: bool, connectPc: bool },
   files: { acceptDrops: bool, reveal: bool, dragEdge: bool, shortcuts: bool, copyKeys: accel('Control+Alt+C'), pasteKeys: accel('Control+Alt+V') },
   notifs: { send: bool, receive: bool, hideText: bool },

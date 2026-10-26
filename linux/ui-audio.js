@@ -29,10 +29,13 @@ UI.tab({
         sendState,
       ] },
     );
+    const phoneCard = UI.phoneAudioCard(); // a phone: its sound here over Bluetooth, its media controls
     body.append(
       pair.el,
+      phoneCard.el,
     );
     return (s) => {
+      phoneCard.update(s);
       const a = s.audio;
       const connected = s.link.state === 'connected';
       pair.update(s);

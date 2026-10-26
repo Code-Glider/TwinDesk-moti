@@ -20,16 +20,19 @@ UI.tab({
     const vol = UI.slider({ min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` }, (v) => api.setAudio({ volume: v }));
     const sendRow = UI.row('Play {me}’s sound on {name}', '', [sendSw]);
     const recvRow = UI.row('Play {name}’s sound on {me}', '', [recvSw]);
+    const phoneCard = UI.phoneAudioCard(); // a phone: its media controls on Overview
     body.append(
       UI.pair(
         UI.dir('m2w', [sendRow, UI.row('Mute {me} while sending', '', [mute])]),
         UI.dir('w2m', [recvRow, UI.row('Volume', '', [vol])]),
       ),
+      phoneCard.el,
     );
     const live = (x) => x && x.status === 'live';
     return (s) => {
       const a = s.audio;
       if (!a) return;
+      phoneCard.update(s);
       sendSw.set(a.send);
       mute.set(a.muteLocal);
       recvSw.set(a.receive);

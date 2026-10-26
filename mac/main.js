@@ -56,6 +56,7 @@ if (!app.requestSingleInstanceLock()) {
 
 const P = require('../shared/protocol.js');
 const { CamShare } = require('../shared/camshare.js');
+const { NowPlaying } = require('../shared/nowplaying.js');
 const store = require('./store');
 const identity = require('./identity');
 const { Discovery, interfaces } = require('./discovery');
@@ -209,6 +210,8 @@ function pushState() {
     state.keys = settings.keys;
     state.clipboard = clip ? { ...settings.clipboard, ...clip.view } : null;
     state.camera = svc && svc.camShare ? svc.camShare.state : null;
+    state.phoneMedia = svc && svc.nowPlaying ? svc.nowPlaying.view : null;
+    state.btAudio = null; // macOS can't be a phone's Bluetooth speaker
     state.ui = settings.ui;
     state.app = settings.app;
     if (kvm) state.input = kvm.view;
@@ -529,6 +532,10 @@ app.whenReady().then(() => {
   svc.phone.bridge.wired = svc.wired;
   svc.phone.wired = svc.wired;
   svc.phoneViews = new PhoneViews({ bridge: svc.phone.bridge, phone: svc.phone, getSettings: () => settings, server: peer, fileSend: svc.fileSend });
+  // What plays on the phone, for the Overview's media controls (shared/nowplaying.js). Its sound as
+  // this Mac's Bluetooth speaker isn't here: macOS can't be one.
+  svc.nowPlaying = new NowPlaying({ server: peer, cfg: () => settings.audio });
+  svc.nowPlaying.on('change', pushState);
   // Camera tab: the cameras of the two computers (shared/camshare.js; a phone's is phoneViews.openCamera).
   const computer = () => !!peer.current && peer.current.os !== P.OS.ANDROID;
   svc.camShare = new CamShare({

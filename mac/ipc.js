@@ -39,7 +39,7 @@ const SCHEMA = {
   keys: { swapCtrlCmd: bool, hotkey: oneOf(P.HOTKEYS, 'AltRight') },
   app: { openAtLogin: bool, keepAwake: bool, hud: bool },
   updates: { auto: bool },
-  audio: { send: bool, receive: bool, muteLocal: bool, volume: clamp(0, 1, 1) },
+  audio: { send: bool, receive: bool, muteLocal: bool, volume: clamp(0, 1, 1), phoneMedia: bool },
   terminal: { allowPc: bool, connectPc: bool },
   files: { acceptDrops: bool, reveal: bool, dragEdge: bool, shortcuts: bool, copyKeys: accel('Control+Alt+C'), pasteKeys: accel('Control+Alt+V') },
   notifs: { send: bool, receive: bool, hideText: bool },
@@ -448,7 +448,13 @@ function setupIpc(ctx) {
     setAudio(partial) {
       setGroup('audio', partial);
       ctx.audio.applySettings();
+      if (partial && 'phoneMedia' in partial && ctx.nowPlaying) ctx.nowPlaying.apply();
     },
+    // The phone's media controls on the Overview (shared/nowplaying.js).
+    phoneMedia(m) {
+      if (m && ctx.nowPlaying) ctx.nowPlaying.control(String(m.a || ''), m.pos);
+    },
+    phoneBtPick() {}, // no Bluetooth speaker mode on macOS
     // Camera tab: the other computer's camera here, this Mac's there (shared/camshare.js). macOS
     // asks for the camera when sharing is first turned on.
     camera(m) {

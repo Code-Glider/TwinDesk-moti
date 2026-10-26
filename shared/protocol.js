@@ -213,6 +213,10 @@
       PHONE_SOUND_WANT: 'phone.sound.want', // computer->phone {on}: its sound here without wireless debugging (playback capture, Start on the phone), while adb can't carry it
       PHONE_SOUND: 'phone.sound', // phone->computer {codec: 'opus'|'pcm', p: [base64]}: 20 ms each (Opus packets, or 48 kHz stereo s16le)
       PHONE_SOUND_STATE: 'phone.sound.state', // phone->computer {on, waiting (for Start on the phone), error, codec}
+      // What plays on the phone, for the Overview's media controls (shared/nowplaying.js, NowPlaying.kt):
+      PHONE_MEDIA_WANT: 'phone.media.want', // computer->phone {on}: send phone.media (Audio › Media controls on Overview)
+      PHONE_MEDIA: 'phone.media', // phone->computer {app, appName, title, artist, album, playing, duration, position, at, speed, next, prev, seek, art?} or {none, why?}; art (a data: URL) only when it changed
+      PHONE_MEDIA_CTL: 'phone.media.ctl', // computer->phone {a: 'play'|'pause'|'toggle'|'next'|'prev'|'seek', pos?}
       // The phone as the computer's remote (its Remote page: touchpad, keyboard, gamepad), phone->computer.
       // Relative like k.*, applied only while the computer lets the phone control it (Windows for now):
       REMOTE_HELLO: 'remote.hello', // phone->computer: the Remote page opened (the computer answers remote.state)

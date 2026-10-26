@@ -94,7 +94,13 @@ function setupIpc(ctx) {
   handle('clearHistory', () => clip.clearHistory());
   handle('setTab', (tab) => change('ui', { tab })); // invalid names fall back in normalize()
   handle('setMulti', (on) => require('./multi').set(on === true)); // Multi-device: TwinDesk restarts
-  handle('setAudio', (partial) => change('audio', partial, () => sound.apply()));
+  handle('setAudio', (partial) => change('audio', partial, () => {
+    sound.apply();
+    if (partial && 'phoneMedia' in partial && ctx.nowPlaying) ctx.nowPlaying.apply();
+    if (partial && 'phoneBt' in partial && ctx.btAudio) ctx.btAudio.apply();
+  }));
+  handle('phoneMedia', (m) => m && ctx.nowPlaying && ctx.nowPlaying.control(String(m.a || ''), m.pos));
+  handle('phoneBtPick', (id) => typeof id === 'string' && id && ctx.btAudio && ctx.btAudio.pick(id));
   // Camera tab: the other computer's camera here, this one's there (shared/camshare.js).
   handle('camera', (m) => {
     const c = ctx.camShare;

@@ -102,6 +102,11 @@ function normalize(s) {
       volume: Math.round(num(audio.volume, 1, 0, 1) * 100) / 100,
       send: bool(audio.send, false), // send this PC's sound to the Mac (dir w2m)
       muteLocal: bool(audio.muteLocal, false), // silence this PC while sending
+      // A phone: its media controls on Overview (shared/nowplaying.js), and its sound here over
+      // Bluetooth, this computer as its speaker (shared/btaudio.js), off until turned on
+      phoneMedia: bool(audio.phoneMedia, true),
+      phoneBt: bool(audio.phoneBt, false),
+      phoneBtDevice: typeof audio.phoneBtDevice === 'string' ? audio.phoneBtDevice.slice(0, 400) : '',
     },
     terminal: {
       enabled: bool(term.enabled, false), // shell on the Mac from this PC

@@ -26,6 +26,7 @@ UI.tab({
     const againBtn = UI.button('Connect', () => api.connectAgain(), 'small primary');
     const sessionBtns = el('div', { class: 'hero-actions' }, [againBtn, discBtn]);
     const peerDev = el('div', { class: 'device mac' });
+    const nowPlaying = UI.nowPlaying();
     const netCancel = UI.button('Cancel', () => api.netCancel(), 'small');
     netCancel.hidden = true;
     // A session on Bluetooth: onto a direct Wi-Fi link on request, until Back to Bluetooth.
@@ -48,6 +49,7 @@ UI.tab({
         el('div', { class: 'hero-mid' }, [linkLine, linkText]),
         el('div', { class: 'hero-device' }, [peerDev, macName]),
       ]),
+      nowPlaying.el, // the phone's media controls, while it plays (shared/ui-nowplaying.js)
       status,
       hsForm,
       netCancel,
@@ -161,6 +163,7 @@ UI.tab({
       if (UI.phoneWall && p.phone) peerDev.style.setProperty('--phone-wall', UI.phoneWall);
       else peerDev.style.removeProperty('--phone-wall');
       linkLine.className = 'hero-link' + (connected ? ' up' : '');
+      nowPlaying.update(s);
       const ble = s.net && s.net.transport === 'ble';
       linkText.textContent = connected ? (l.rtt != null ? l.rtt + ' ms · ' : '') + UI.via(s)
         : s.pairing ? 'Pairing…' : s.paired ? 'Connecting…' : 'Not connected';

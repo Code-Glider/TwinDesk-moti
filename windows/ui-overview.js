@@ -44,12 +44,14 @@ UI.tab({
     hsForm.hidden = true;
     let hsShown = false;
     const peerDev = el('div', { class: 'device mac' });
+    const nowPlaying = UI.nowPlaying();
     const hero = el('div', { class: 'card hero' }, [
       el('div', { class: 'hero-devices' }, [
         el('div', { class: 'hero-device' }, [el('div', { class: 'device pc' }), pcName]),
         el('div', { class: 'hero-mid' }, [linkLine, linkText]),
         el('div', { class: 'hero-device' }, [peerDev, macName]),
       ]),
+      nowPlaying.el, // the phone's media controls, while it plays (shared/ui-nowplaying.js)
       status,
       sessionBtns,
       hsForm,
@@ -164,6 +166,7 @@ UI.tab({
       if (UI.phoneWall && p.phone) peerDev.style.setProperty('--phone-wall', UI.phoneWall);
       else peerDev.style.removeProperty('--phone-wall');
       linkLine.className = 'hero-link' + (connected ? ' up' : '');
+      nowPlaying.update(s);
       const ble = s.net && s.net.transport === 'ble';
       linkText.textContent = connected ? (l.rtt != null ? l.rtt + ' ms · ' : '') + UI.via(s)
         : s.pairing ? 'Pairing…' : s.paired ? 'Connecting…' : 'Not connected';

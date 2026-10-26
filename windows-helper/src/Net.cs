@@ -12,6 +12,7 @@
 //   Wi-Fi Direct (a network the other side joins while this PC stays on its own Wi-Fi):
 //     wfdCaps -> {host, wifi}; wfdHost {ssid, pass}; wfdStop; and for joining (wifi.js) too:
 //     wfdRadio {on} -> {was} (Wi-Fi on/off); wfdSsid -> {ssid}; wfdLocation -> {status}
+//   The phone's sound as this PC's Bluetooth speaker (A2dp.cs): a2dpList, a2dpOpen {dev}, a2dpClose; event a2dp.state
 // See shared/blepipe.js and shared/netlink.js for what main does with them.
 using System;
 using System.Collections.Generic;
@@ -72,7 +73,7 @@ namespace MacShare
         // True when the line was one of ours.
         public static bool Handle(string line)
         {
-            if (line.IndexOf("\"cmd\":\"ble", StringComparison.Ordinal) < 0 && line.IndexOf("\"cmd\":\"blp", StringComparison.Ordinal) < 0 && line.IndexOf("\"cmd\":\"wfd", StringComparison.Ordinal) < 0) return false;
+            if (line.IndexOf("\"cmd\":\"ble", StringComparison.Ordinal) < 0 && line.IndexOf("\"cmd\":\"blp", StringComparison.Ordinal) < 0 && line.IndexOf("\"cmd\":\"wfd", StringComparison.Ordinal) < 0 && line.IndexOf("\"cmd\":\"a2dp", StringComparison.Ordinal) < 0) return false;
             Dictionary<string, object> m;
             try { m = Json.Parse(line); }
             catch (Exception) { return true; }
@@ -133,6 +134,13 @@ namespace MacShare
                         Async(id, async () => { await wfd.Start(ssid, pass); return null; });
                         break;
                     case "wfdStop": wfd.Stop(); Reply(id, null); break;
+                    // The phone's sound here as its Bluetooth speaker (A2dp.cs).
+                    case "a2dpList": Async(id, () => A2dp.List()); break;
+                    case "a2dpOpen":
+                        string a2dpId = Json.Str(m, "dev", "");
+                        Async(id, () => A2dp.Open(a2dpId));
+                        break;
+                    case "a2dpClose": A2dp.Close(); Reply(id, null); break;
                     default: Fail(id, "unknown cmd " + cmd); break;
                 }
             }

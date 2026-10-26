@@ -189,3 +189,22 @@ body.callpop {
 }
 .cp:hover .cp-x { opacity: 1; }
 body.callpop.missed .cp-sub { color: var(--bad); }
+
+/* The phone's media controls on the Overview (ui-nowplaying.js): in the connected phone's card. */
+.np { display: flex; align-items: center; gap: 12px; margin: 14px 4px 2px; padding: 10px 12px; border-radius: 12px; background: var(--hover); text-align: left; }
+.np[hidden] { display: none; }
+.np-art { width: 52px; height: 52px; flex: none; border-radius: 8px; background: var(--track-off) center / cover no-repeat; }
+.np-art.none { background-image: linear-gradient(135deg, #bf5af2, #ff375f) !important; }
+.np-main { flex: 1; min-width: 0; }
+.np-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.np-pos { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.np-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--track-off); overflow: hidden; }
+.np-bar.seek { cursor: pointer; }
+.np-fill { height: 100%; width: 0; background: var(--accent); border-radius: 2px; }
+.np-time { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
+.np-ctl { display: flex; gap: 2px; flex: none; }
+.np-btn { width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.np-btn:hover:not(:disabled) { background: var(--track-off); }
+.np-btn:disabled { opacity: 0.35; cursor: default; }
+.np-btn svg { width: 18px; height: 18px; fill: var(--text); stroke: var(--text); stroke-width: 1.4; stroke-linejoin: round; }

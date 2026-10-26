@@ -65,6 +65,19 @@ class Notifs(core: Core) : Feature(core) {
             ?: x.getCharSequence(Notification.EXTRA_TITLE_BIG))?.toString()?.trim() ?: ""
     }
 
+    // MessagingStyle's messages, and a message's sender (typed reads from Android 13).
+    @Suppress("DEPRECATION")
+    private fun messages(x: Bundle): Array<out android.os.Parcelable>? =
+        if (Build.VERSION.SDK_INT >= 33) x.getParcelableArray(Notification.EXTRA_MESSAGES, android.os.Parcelable::class.java)
+        else x.getParcelableArray(Notification.EXTRA_MESSAGES)
+
+    @Suppress("DEPRECATION")
+    private fun senderOf(m: Bundle): android.app.Person? = when {
+        Build.VERSION.SDK_INT >= 33 -> m.getParcelable("sender_person", android.app.Person::class.java)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P -> m.getParcelable("sender_person")
+        else -> null
+    }
+
     // Extract text from MessagingStyle (WhatsApp, etc.), InboxStyle, BigText, Text, or SubText
     private fun extractText(x: Bundle): String {
         // 1. Direct big text or standard text
@@ -75,16 +88,11 @@ class Notifs(core: Core) : Feature(core) {
         if (!text.isNullOrEmpty()) return text
 
         // 2. MessagingStyle (used by WhatsApp, Telegram, Google Messages)
-        val msgs = if (Build.VERSION.SDK_INT >= 33) x.getParcelableArray(Notification.EXTRA_MESSAGES, android.os.Parcelable::class.java)
-            else @Suppress("DEPRECATION") x.getParcelableArray(Notification.EXTRA_MESSAGES)
+        val msgs = messages(x)
         if (!msgs.isNullOrEmpty()) {
             val lastMsg = msgs.lastOrNull()
             if (lastMsg is Bundle) {
-                val senderPerson = when {
-                    Build.VERSION.SDK_INT >= 33 -> lastMsg.getParcelable("sender_person", android.app.Person::class.java)?.name?.toString()?.trim() ?: ""
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.P -> @Suppress("DEPRECATION") lastMsg.getParcelable<android.app.Person>("sender_person")?.name?.toString()?.trim() ?: ""
-                    else -> ""
-                }
+                val senderPerson = senderOf(lastMsg)?.name?.toString()?.trim() ?: ""
                 val sender = senderPerson.ifEmpty { lastMsg.getCharSequence("sender")?.toString()?.trim() ?: "" }
                 val msgText = lastMsg.getCharSequence("text")?.toString()?.trim() ?: ""
                 if (msgText.isNotEmpty()) {

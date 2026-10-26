@@ -25,6 +25,9 @@ const identity = require('./identity');
 const Screen = require('./screen');
 const Clip = require('./clip');
 const { CamShare } = require('../shared/camshare.js');
+const { NowPlaying } = require('../shared/nowplaying.js');
+const { BtAudio } = require('../shared/btaudio.js');
+const { LinuxA2dp } = require('./a2dp');
 const Helper = require('./helper');
 const Kvm = require('./kvm');
 const Hud = require('./hud');
@@ -101,6 +104,8 @@ let device = null;
 let screen = null;
 let clip = null;
 let camShare = null; // Camera tab: the cameras of the two computers (shared/camshare.js)
+let nowPlaying = null; // what plays on the phone, for the Overview's media controls (shared/nowplaying.js)
+let btAudio = null; // the phone's sound here over Bluetooth (shared/btaudio.js)
 let helper = null;
 let kvm = null;
 let sound = null;
@@ -307,7 +312,7 @@ function start() {
   });
   updates.start();
   const ipc = setupIpc({ link, discovery, screen, clip, kvm, fileDrop, smb, fileClip, vdd, sound, pcScreen, notifs, wake, terminal, sshd, apps, pcApps, peerApps, updates, settings, save: saveSettings, push: pushState, buildState,
-    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get camShare() { return camShare; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
+    get phone() { return phone; }, get phoneViews() { return phoneViews; }, get camShare() { return camShare; }, get nowPlaying() { return nowPlaying; }, get btAudio() { return btAudio; }, get phoneDrive() { return phoneDrive; }, connectPhoneDev, cancelPhoneInvite, hub: loadHub,
     get net() { return net; }, get wifi() { return wifi; }, applyNet, joinHotspot, openBluetoothSettings,
     checkFirewall, fixFirewall, fixInput, setStartup, onApp: () => updateTray(buildState()) });
   pairSync = new PairSync({ link, settings, save: saveSettings, set: ipc.set }); // Two-way switches per pair
@@ -414,6 +419,11 @@ function startPhone(server, pairing) {
   });
   phone.bridge.on('popup', (kind, text) => hud.show(kind, text));
   phoneViews = new PhoneViews({ bridge: phone.bridge, phone, getSettings: () => settings, server: pl, fileSend: fileDrop });
+  nowPlaying = new NowPlaying({ server: pl, cfg: () => settings.audio });
+  nowPlaying.on('change', pushState);
+  // Audio › Play phone sound here (Bluetooth): this computer as the phone's Bluetooth speaker (a2dp.js).
+  btAudio = new BtAudio({ server: pl, backend: new LinuxA2dp(), cfg: () => settings.audio, save: saveSettings });
+  btAudio.on('change', pushState);
   phoneViews.on('change', pushState);
   viaWifi(phoneViews, 'openScreen', 'phone');
   viaWifi(phoneViews, 'openApp', 'phone');
@@ -854,6 +864,8 @@ function buildState() {
     monitor: settings.monitor,
     clipboard: { ...settings.clipboard, ...clip.view },
     camera: camShare.state,
+    phoneMedia: nowPlaying ? nowPlaying.view : null,
+    btAudio: btAudio ? btAudio.view : null,
     ui: settings.ui,
     app: settings.app,
     version: app.getVersion(),
