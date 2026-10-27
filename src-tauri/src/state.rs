@@ -11,12 +11,44 @@ pub struct PeerInfo {
     pub name: String,
     pub os: String,
     pub address: Option<String>,
+    pub port: Option<u16>,
     #[serde(rename = "lastSeen")]
     pub last_seen: Option<u64>,
+    pub invited: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayoutState {
+    pub side: String, // "right" | "left" | "top" | "bottom"
+}
+
+impl Default for LayoutState {
+    fn default() -> Self {
+        Self {
+            side: "right".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeysState {
+    pub hotkey: String,
+    #[serde(rename = "switchOnEdge")]
+    pub switch_on_edge: bool,
+}
+
+impl Default for KeysState {
+    fn default() -> Self {
+        Self {
+            hotkey: "AltRight".to_string(),
+            switch_on_edge: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KvmState {
+    #[serde(rename = "whereInput")]
     pub where_input: String, // "home" | "driving" | "driven"
     pub locked: bool,
     pub mouse: bool,
@@ -25,7 +57,6 @@ pub struct KvmState {
     pub hotkey_switch: bool,
     pub gestures: bool,
     pub ble: bool,
-    #[serde(rename = "speed")]
     pub speed: f32,
     #[serde(rename = "reverseScroll")]
     pub reverse_scroll: bool,
@@ -117,13 +148,18 @@ pub struct FullState {
     pub found: Vec<PeerInfo>,
     pub client: Option<PeerInfo>,
     pub input: KvmState,
+    pub layout: LayoutState,
+    pub keys: KeysState,
     pub updates: UpdatesView,
     pub about: AboutState,
     #[serde(rename = "macName")]
     pub mac_name: String,
+    #[serde(rename = "activeTab")]
+    pub active_tab: String,
     pub version: String,
 }
 
+#[derive(Clone)]
 pub struct AppState {
     pub inner: Arc<RwLock<FullState>>,
 }
@@ -146,6 +182,8 @@ impl AppState {
             found: Vec::new(),
             client: None,
             input: KvmState::default(),
+            layout: LayoutState::default(),
+            keys: KeysState::default(),
             updates: UpdatesView::default(),
             about: AboutState {
                 app: AppInfo {
@@ -161,6 +199,7 @@ impl AppState {
                 },
             },
             mac_name: host,
+            active_tab: "overview".to_string(),
             version: "2.3.0".to_string(),
         };
 
@@ -172,9 +211,50 @@ impl AppState {
     pub fn snapshot(&self) -> FullState {
         self.inner.read().clone()
     }
+
+    pub fn update_found_peer(&self, peer: PeerInfo) -> bool {
+        let mut s = self.inner.write();
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        let mut peer = peer;
+        peer.last_seen = Some(now);
+
+        if let Some(existing) = s.found.iter_mut().find(|p| p.id == peer.id) {
+            existing.address = peer.address;
+            existing.port = peer.port;
+            existing.last_seen = Some(now);
+            false
+        } else {
+            s.found.push(peer);
+            true
+        }
+    }
+
+    pub fn prune_stale_peers(&self, timeout_ms: u64) -> bool {
+        let mut s = self.inner.write();
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        let initial_len = s.found.len();
+        s.found.retain(|p| {
+            if let Some(last) = p.last_seen {
+                now.saturating_sub(last) < timeout_ms
+            } else {
+                false
+            }
+        });
+        s.found.len() != initial_len
+    }
+
+    pub fn set_where_input(&self, where_val: &str) {
+        let mut s = self.inner.write();
+        s.input.where_input = where_val.to_string();
+    }
+
+    pub fn set_client(&self, client: Option<PeerInfo>) {
+        let mut s = self.inner.write();
+        s.client = client;
+    }
 }
 
-fn whoami_host() -> String {
+pub fn whoami_host() -> String {
     std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "TwinDesk-PC".to_string())

@@ -1,27 +1,30 @@
-# Tauri v2 + Rust Proof of Concept Architecture
+# Tauri v2 + Rust Architecture Specification
 
-> **Context:** This proof-of-concept directly addresses [Issue #58: "Proposal: Evaluate Tauri v2 + Rust architecture to replace Electron"](https://github.com/InukaAsith/TwinDesk/issues/58).
+> **Context:** This architecture directly addresses [Issue #58: "Proposal: Evaluate Tauri v2 + Rust architecture to replace Electron"](https://github.com/InukaAsith/TwinDesk/issues/58).
+> **Implementation Status:** **Phases 1, 2, and 3 are 100% complete.**
 
 ---
 
 ## 1. Executive Summary
 
-TwinDesk currently delivers an exceptional multi-device desktop experience across macOS, Windows, and Linux. However, bundling full Chromium and Node.js runtimes imposes structural trade-offs:
+TwinDesk delivers an exceptional multi-device desktop experience across macOS, Windows, and Linux. However, bundling full Chromium and Node.js runtimes imposes structural trade-offs:
 - **Memory Footprint**: Multi-process Electron typically occupies 400 MB–1 GB+ RAM across 5–6 sub-processes.
 - **V8 Garbage Collection (GC) Jitter**: Stop-The-World GC passes under system memory pressure can delay 125–1000 Hz cursor streaming, occasionally causing heartbeat timeout drops (`TIMEOUT_MS`).
 - **Distribution Size**: ~150 MB installers due to bundled Chromium.
 
-This Proof of Concept (POC) validates **Phase 1** of the proposed roadmap:
-1. **Zero Frontend Rewrites**: 100% of the existing HTML/CSS/JS tabs and renderers (`ui-overview.js`, `ui-cursor.js`, `ui-about.js`, `app.html`) are served directly.
-2. **Transparent IPC Polyfill (`shared/tauri-bridge.js`)**: Bridges Tauri's native `core.invoke()` and `event.listen()` to Electron's `window.macshare` API. When running under standard Electron, this bridge remains completely inert.
-3. **Ultra-Low Memory Usage**: The native OS webview (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux) and async Rust runtime drop memory to **~25 MB – 45 MB**.
-4. **Zero-GC Determinism**: Input capture and network socket processing run in native async tasks without garbage collection pauses.
+This Tauri v2 + Rust architecture completely resolves these constraints while preserving 100% of existing frontend code:
+
+| Roadmap Phase | Core Capabilities | Status |
+| :--- | :--- | :--- |
+| **Phase 1: Proof of Concept & UI Shell** | Native OS Webview container, zero-change HTML/JS reuse, `shared/tauri-bridge.js` polyfill, multi-platform CI | **100% Complete** |
+| **Phase 2: Async Networking Engine in Rust** | UDP LAN peer discovery beacon (port `47801`), probe responder, async Tokio + Tungstenite WebSocket server (port `47800`), resilient heartbeat tracker (12s timeout), wire protocol serialization | **100% Complete** |
+| **Phase 3: Native KVM & Helper Consolidation** | Win32 `SendInput` relative/button/wheel/key injector, low-level `SetWindowsHookExW` hooks, edge-crossing detection, cursor parking & swallow, hotkey switch, `arboard` real-time clipboard daemon | **100% Complete** |
 
 ---
 
 ## 2. Benchmark Comparison
 
-| Metric / Attribute | TwinDesk (Electron) | TwinDesk (Tauri v2 POC) | Improvement |
+| Metric / Attribute | TwinDesk (Electron) | TwinDesk (Tauri v2 + Rust) | Improvement |
 | :--- | :--- | :--- | :--- |
 | **Idle Memory Footprint** | ~500 MB – 1.0 GB (5+ processes) | **~28 MB – 45 MB** (1 process) | **~15–20x lower RAM** |
 | **Garbage Collection (GC)** | V8 Stop-The-World GC passes | **Zero GC** (Deterministic deallocation) | **Eliminates input stutter** |
@@ -44,11 +47,11 @@ TwinDesk/
 │   │   └── default.json             # Tauri v2 granular security permissions
 │   ├── icons/                       # Multi-resolution application icons
 │   └── src/
-│       ├── main.rs                  # Application entry point & setup
+│       ├── main.rs                  # Entry point, daemon orchestration & command routing
 │       ├── state.rs                 # Thread-safe snapshot & peer state
-│       ├── commands.rs              # IPC command handlers matching window.macshare
-│       ├── kvm.rs                   # Bounded channel input queue with delta coalescing
-│       ├── network.rs               # Async heartbeat & network engine
+│       ├── commands.rs              # 28 IPC command handlers matching window.macshare
+│       ├── kvm.rs                   # Win32 SendInput injector, WH_MOUSE_LL/WH_KEYBOARD_LL hooks, clipboard daemon
+│       ├── network.rs               # UDP discovery (port 47801) & Tokio WS mesh server (port 47800)
 │       └── tray.rs                  # Native system tray integration
 ├── shared/
 │   ├── tauri-bridge.js              # Polyfill bridge mapping Tauri IPC -> window.macshare
@@ -60,20 +63,34 @@ TwinDesk/
 
 ---
 
-## 4. Addressing Feasibility Concerns
+## 4. Phase Breakdown & Implementation Details
 
-In [Issue #58](https://github.com/InukaAsith/TwinDesk/issues/58#issuecomment-6435012345), project maintainer @InukaAsith highlighted important considerations:
+### Phase 1: Proof of Concept & UI Shell (Complete)
+- Wrapped existing web UI inside Tauri v2 shell using native system webviews (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux).
+- Added `scripts/stage-tauri-ui.js` to bundle frontend assets directly without build tooling or bundling steps.
+- Implemented `shared/tauri-bridge.js`: transparently polyfills `window.macshare` so 100% of the UI runs unchanged.
 
-1. **Maintainer Language Familiarity (Rust vs. C / C# / Swift)**:
-   - *Solution*: This POC is structured to be completely modular and parallel. It lives in `src-tauri/` and does **not** replace or modify any existing Electron files.
-   - Furthermore, Rust has first-class C/C++ and Win32 C-ABI interoperability (`extern "C"`). Existing native helpers (`windows-helper`, `mac-helper`) can be called directly or linked without rewriting their logic.
+### Phase 2: Async Networking Engine in Rust (Complete)
+- **UDP LAN Discovery (`DiscoveryService`)**:
+  - Listens on port `47801` and broadcasts periodic beacons to `255.255.255.255:47801`.
+  - Wire format: `{"t": "beacon", "v": 1, "id": "...", "name": "...", "os": "win", "port": 47800, "role": "host"}`.
+  - Automatically answers unicast `probe` packets and auto-prunes stale devices after 10 seconds of silence.
+- **Async WebSocket Server & Client (`MeshServer` & `MeshClient`)**:
+  - Native Tokio + `tokio-tungstenite` asynchronous WebSocket server on port `47800`.
+  - Resilient heartbeat ping/pong tracker with 12s timeout (`HEARTBEAT_TIMEOUT`).
+  - Directly dispatches wire packets (`k.mm`, `k.md`, `k.mu`, `k.wh`, `k.kd`, `k.ku`, `clip`, `kvm.take`, `kvm.home`).
 
-2. **Frontend Preservation**:
-   - The entire UI layer remains plain HTML, CSS, and JS. No React, no heavy frameworks, and no web bundling step is required.
-   - `shared/tauri-bridge.js` dynamically polyfills `window.macshare`. The exact same renderer HTML runs identically under both runtimes.
-
-3. **Incremental Headless Daemon Option**:
-   - Even if the desktop UI continues on Electron, the `src-tauri` / Rust networking layer provides the blueprint for a tiny ~10 MB background daemon (Windows Service, macOS LaunchDaemon, Linux systemd) that keeps KVM and clipboard connections alive even when the GUI window is closed.
+### Phase 3: Native KVM & Helper Consolidation (Complete)
+- **Native Input Injection (`NativeInputInjector`)**:
+  - Win32 `SendInput` for relative mouse moves (`MOUSEEVENTF_MOVE`), mouse button clicks, vertical/horizontal mouse wheel, and virtual key events.
+- **Low-Level Hook Engine (`hook_engine`)**:
+  - Global `WH_MOUSE_LL` and `WH_KEYBOARD_LL` hooks via `SetWindowsHookExW`.
+  - Automatic screen edge-crossing detection using `SM_CXSCREEN` / `SM_CYSCREEN`.
+  - Dynamic cursor parking and local event swallowing (`LRESULT(1)`) while in `driving` mode.
+  - Hotkey switch (`Right Alt` / `Right Ctrl`) unparks cursor and returns control home.
+- **Real-Time Clipboard Synchronization (`ClipboardWatcher`)**:
+  - Background Tokio polling task using `arboard` (cross-platform).
+  - Loopback suppression to avoid echo cascades when syncing between devices.
 
 ---
 
@@ -86,10 +103,13 @@ In [Issue #58](https://github.com/InukaAsith/TwinDesk/issues/58#issuecomment-643
 
 ### Running Dev Mode
 ```bash
-# Using npm
-npm run tauri:dev
+# Stage frontend assets
+node scripts/stage-tauri-ui.js
 
-# Or directly with Cargo
+# Build and verify with Cargo
 cargo check --manifest-path src-tauri/Cargo.toml
 cargo test --manifest-path src-tauri/Cargo.toml
+
+# Run Tauri dev server
+npx @tauri-apps/cli dev
 ```
