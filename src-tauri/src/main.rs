@@ -22,13 +22,14 @@ fn main() {
     env_logger::init();
 
     let state = AppState::new();
+    let setup_state = state.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(state.clone())
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
-            let network = NetworkManager::new(handle.clone(), state.clone());
+            let network = NetworkManager::new(handle.clone(), setup_state);
 
             // 1. Start Async Networking Engine (Phase 2: UDP discovery & WS mesh server)
             network.start();

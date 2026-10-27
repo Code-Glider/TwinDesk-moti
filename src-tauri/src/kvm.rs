@@ -249,12 +249,16 @@ impl ClipboardWatcher {
     pub fn start(self: Arc<Self>) {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(400));
-            let mut cb = NativeClipboard::new();
 
             loop {
                 interval.tick().await;
 
-                if let Some(text) = cb.get_text() {
+                let text_opt = {
+                    let mut cb = NativeClipboard::new();
+                    cb.get_text()
+                };
+
+                if let Some(text) = text_opt {
                     let mut last = self.last_text.lock();
                     if !text.is_empty() && *last != text {
                         *last = text.clone();
@@ -486,7 +490,7 @@ pub mod hook_engine {
             }
         }
 
-        CallNextHookEx(MOUSE_HOOK, n_code, w_param, l_param)
+        CallNextHookEx(HHOOK::default(), n_code, w_param, l_param)
     }
 
     unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
@@ -544,7 +548,7 @@ pub mod hook_engine {
             }
         }
 
-        CallNextHookEx(KEYBOARD_HOOK, n_code, w_param, l_param)
+        CallNextHookEx(HHOOK::default(), n_code, w_param, l_param)
     }
 }
 
