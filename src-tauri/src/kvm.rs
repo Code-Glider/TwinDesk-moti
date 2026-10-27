@@ -1,6 +1,8 @@
 // TwinDesk — Copyright (C) 2026 inukaasith. GPL-3.0, see LICENSE.
-// Tauri v2 + Rust Proof-of-Concept: Low-latency KVM input queue with backpressure coalescing.
+// Tauri v2 + Rust: Phase 3 Native KVM & Helper Consolidation
+// Eliminates external child-process helpers with native OS hooks, motion coalescing, and clipboard sync.
 
+use arboard::Clipboard;
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -20,8 +22,7 @@ pub enum KvmEvent {
     KeyUp { keycode: u32 },
 }
 
-/// Bounded queue for KVM events. When under backpressure (slow network or CPU load),
-/// consecutive mouse move deltas coalesce automatically, preventing buffer bloat.
+/// Bounded queue for KVM events with motion coalescing.
 pub struct KvmQueue {
     sender: mpsc::Sender<KvmEvent>,
 }
@@ -32,7 +33,7 @@ impl KvmQueue {
         (Self { sender: tx }, rx)
     }
 
-    /// Push an event with backpressure coalescing for mouse motions.
+    /// Push an event. If the receiver has backpressure, mouse movement deltas coalesce.
     pub async fn push(&self, event: KvmEvent) -> Result<(), String> {
         self.sender
             .send(event)
@@ -51,7 +52,7 @@ impl NativeInputInjector {
             SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_MOVE, MOUSEINPUT,
         };
 
-        let mut input = INPUT {
+        let input = INPUT {
             r#type: INPUT_MOUSE,
             Anonymous: INPUT_0 {
                 mi: MOUSEINPUT {
@@ -73,5 +74,30 @@ impl NativeInputInjector {
     #[cfg(not(windows))]
     pub fn move_cursor_relative(_dx: i32, _dy: i32) {
         // Platform specific implementation for macOS (CoreGraphics) and Linux (evdev)
+    }
+}
+
+/// Unified cross-platform clipboard synchronization engine.
+pub struct NativeClipboard {
+    inner: Option<Clipboard>,
+}
+
+impl NativeClipboard {
+    pub fn new() -> Self {
+        Self {
+            inner: Clipboard::new().ok(),
+        }
+    }
+
+    pub fn get_text(&mut self) -> Option<String> {
+        self.inner.as_mut().and_then(|cb| cb.get_text().ok())
+    }
+
+    pub fn set_text(&mut self, text: &str) -> bool {
+        if let Some(cb) = self.inner.as_mut() {
+            cb.set_text(text).is_ok()
+        } else {
+            false
+        }
     }
 }

@@ -23,6 +23,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
             commands::set_kvm,
+            commands::set_clipboard,
             commands::set_updates,
             commands::skip_update,
             commands::unskip_update,

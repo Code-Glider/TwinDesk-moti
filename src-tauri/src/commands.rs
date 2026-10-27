@@ -33,6 +33,15 @@ pub fn set_kvm(partial: Value, state: State<'_, AppState>, app: AppHandle) -> Re
 }
 
 #[tauri::command]
+pub fn set_clipboard(partial: Value, _state: State<'_, AppState>) -> Result<(), String> {
+    if let Some(text) = partial.get("text").and_then(|v| v.as_str()) {
+        let mut cb = crate::kvm::NativeClipboard::new();
+        cb.set_text(text);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn set_updates(partial: Value, state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     {
         let mut s = state.inner.write();

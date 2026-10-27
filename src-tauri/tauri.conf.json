@@ -4,7 +4,8 @@
   "version": "2.3.0",
   "identifier": "com.twindesk.desktop",
   "build": {
-    "frontendDist": "../windows"
+    "beforeBuildCommand": "node ../scripts/stage-tauri-ui.js",
+    "frontendDist": "../dist-tauri"
   },
   "app": {
     "withGlobalTauri": true,
@@ -12,6 +13,7 @@
       {
         "label": "main",
         "title": "TwinDesk",
+        "url": "index.html",
         "width": 960,
         "height": 640,
         "minWidth": 720,
