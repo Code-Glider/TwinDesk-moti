@@ -4,7 +4,6 @@
   "version": "2.3.0",
   "identifier": "com.twindesk.desktop",
   "build": {
-    "beforeBuildCommand": "node ../scripts/stage-tauri-ui.js",
     "frontendDist": "../dist-tauri"
   },
   "app": {
