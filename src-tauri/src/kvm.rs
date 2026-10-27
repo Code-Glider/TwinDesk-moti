@@ -259,9 +259,17 @@ impl ClipboardWatcher {
                 };
 
                 if let Some(text) = text_opt {
-                    let mut last = self.last_text.lock();
-                    if !text.is_empty() && *last != text {
-                        *last = text.clone();
+                    let should_send = {
+                        let mut last = self.last_text.lock();
+                        if !text.is_empty() && *last != text {
+                            *last = text.clone();
+                            true
+                        } else {
+                            false
+                        }
+                    };
+
+                    if should_send {
                         let msg = WireMessage {
                             t: "clip".to_string(),
                             v: Some(1),
