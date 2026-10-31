@@ -12,13 +12,15 @@ on:
         required: false
         default: main
 
-# Write: draft releases and release asset uploads require write permissions.
+# Build/test branches never need a write token. The publish job gets write only after build success.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: macos-latest
+    outputs:
+      source_sha: ${{ steps.source_sha.outputs.sha }}
     # Branch test builds may run repository-controlled scripts, so never supply signing secrets
     # to them. Only the default-branch workflow building main may access release credentials.
     env:
@@ -41,6 +43,10 @@ jobs:
         with:
           ref: ${{ inputs.ref || 'main' }}
           persist-credentials: false
+
+      - name: Record exact build source commit
+        id: source_sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -144,16 +150,34 @@ jobs:
         with:
           name: twindesk-macos-dmg
           path: mac/dist/*.dmg
+          if-no-files-found: error
 
-      # Straight onto the release, no download and re-upload.
+  publish:
+    if: inputs.tag != ''
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified macOS DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: twindesk-macos-dmg
+          path: dist
+
       - name: Upload to the release
-        if: inputs.tag != ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: |
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --target main --title "$RELEASE_TAG" --notes ""
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::No verified build source commit to tag.'
+            exit 1
           fi
-          gh release upload "$RELEASE_TAG" mac/dist/*.dmg --clobber
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --draft --target "$SOURCE_SHA" --title "$RELEASE_TAG" --notes ""
+          fi
+          gh release upload "$RELEASE_TAG" dist/*.dmg --clobber
