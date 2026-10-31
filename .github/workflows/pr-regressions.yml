@@ -47,6 +47,7 @@ jobs:
           # their branches are tested, these files exist and are run automatically.
           tests=(
             shared/test/mesh-registry.js
+            shared/test/pairsync-reconnect.js
             shared/test/kvm-moves.js
             shared/test/clipsync.js
             shared/test/received.js

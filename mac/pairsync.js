@@ -14,6 +14,7 @@
 'use strict';
 
 const P = require('../shared/protocol.js');
+const { offlineChanges } = require('../shared/pairsync-offline.js');
 
 // feature -> settings paths for this Mac's out / in direction.
 const FEATURES = {
@@ -46,8 +47,13 @@ class PairSync {
     this.features = Object.fromEntries(Object.entries(FEATURES).filter(([f]) => !only || only.includes(f)));
     this.last = null; // values as both sides agree on them now
     this.peerId = null;
+    this.offlinePeerId = null;
+    this.offlineValues = null;
 
     server.on('client', (ctx) => {
+      this._rememberOffline(); // a setting may have changed just before the connection came back
+      this.offlinePeerId = null;
+      this.offlineValues = null;
       this.peerId = ctx.deviceId;
       const saved = this._byPeer()[ctx.deviceId];
       if (saved) this._adopt(saved);
@@ -55,7 +61,13 @@ class PairSync {
       if (ctx.role !== 'host') server.send(ctx, { t: P.T.PAIR_SYNC, all: this.last }); // we are the host
     });
     server.on('closed', () => {
-      if (!server.current) this.peerId = null;
+      if (!server.current) {
+        if (this.peerId) {
+          this.offlinePeerId = this.peerId;
+          this.offlineValues = this.values();
+        }
+        this.peerId = null;
+      }
     });
     server.on(`t:${P.T.PAIR_SYNC}`, (m) => {
       const vals = this._values();
@@ -68,8 +80,8 @@ class PairSync {
           if (v && typeof v === 'object') mine[f] = { out: v.in, in: v.out }; // their in = our out (what they don't have stays)
         }
         this._adopt(mine);
-      } else if (this.features[m.feature] && (m.dir === 'out' || m.dir === 'in')) {
-        this._adopt({ [m.feature]: { [m.dir === 'out' ? 'in' : 'out']: !!m.on } });
+      } else if (this.features[m.feature] && (m.dir === 'out' || m.dir === 'in') && typeof m.on === 'boolean') {
+        this._adopt({ [m.feature]: { [m.dir === 'out' ? 'in' : 'out']: m.on } });
       }
     });
   }
@@ -138,8 +150,20 @@ class PairSync {
     this.saveSettings();
   }
 
+  _rememberOffline() {
+    if (!this.offlinePeerId || !this.offlineValues) return;
+    const now = this.values();
+    const peers = this._byPeer();
+    const next = offlineChanges(peers[this.offlinePeerId] || this.offlineValues, this.offlineValues, now);
+    this.offlineValues = now;
+    if (next) {
+      peers[this.offlinePeerId] = next;
+      this.saveSettings();
+    }
+  }
+
   check() {
-    if (!this.server.current || !this.last) return;
+    if (!this.server.current || !this.last) return this._rememberOffline();
     const now = this.values();
     let changed = false;
     for (const f of Object.keys(this.features)) {

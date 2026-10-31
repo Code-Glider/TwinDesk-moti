@@ -14,6 +14,7 @@
 'use strict';
 
 const P = require('../shared/protocol.js');
+const { offlineChanges } = require('../shared/pairsync-offline.js');
 
 const T = P.T;
 
@@ -49,9 +50,14 @@ class PairSync {
     this.features = Object.fromEntries(Object.entries(FEATURES).filter(([f]) => !opts.only || opts.only.includes(f)));
     this.last = null; // the values both computers agree on now
     this.peerId = '';
+    this.offlinePeerId = '';
+    this.offlineValues = null;
     if (!this.settings.pairSync || typeof this.settings.pairSync !== 'object') this.settings.pairSync = {};
 
     this.link.on('welcome', () => {
+      this._rememberOffline();
+      this.offlinePeerId = '';
+      this.offlineValues = null;
       const s = this.link.snapshot().session;
       this.peerId = s && s.id ? String(s.id) : '';
       const saved = this.settings.pairSync[this.peerId];
@@ -59,7 +65,14 @@ class PairSync {
       if (saved) this._adopt(saved);
       if (this.link.hosting) this.link.send({ t: T.PAIR_SYNC, all: this.last }); // we are the host: ours win
     });
-    this.link.on('closed', () => { this.last = null; this.peerId = ''; });
+    this.link.on('closed', () => {
+      if (this.peerId) {
+        this.offlinePeerId = this.peerId;
+        this.offlineValues = this.values();
+      }
+      this.last = null;
+      this.peerId = '';
+    });
     this.link.on(T.PAIR_SYNC, (m) => {
       if (!this.last) return;
       const vals = this._values();
@@ -132,8 +145,19 @@ class PairSync {
     this.save();
   }
 
+  _rememberOffline() {
+    if (!this.offlinePeerId || !this.offlineValues) return;
+    const now = this.values();
+    const next = offlineChanges(this.settings.pairSync[this.offlinePeerId] || this.offlineValues, this.offlineValues, now);
+    this.offlineValues = now;
+    if (next) {
+      this.settings.pairSync[this.offlinePeerId] = next;
+      this.save();
+    }
+  }
+
   check() {
-    if (!this.last || this.link.status.state !== 'connected') return;
+    if (!this.last || this.link.status.state !== 'connected') return this._rememberOffline();
     const now = this.values();
     let changed = false;
     for (const f of Object.keys(this.features)) {
