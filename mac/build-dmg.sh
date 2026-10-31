@@ -48,7 +48,8 @@ rm -f "$DMG"
 echo "DMG created successfully: $DMG"
 ls -lh "$DMG"
 
-# Developer ID signing & Apple Notarization (optional, avoids Gatekeeper quarantine)
+# Developer ID signing & Apple notarization: validates normal quarantined downloads; it does
+# not remove com.apple.quarantine or bypass Gatekeeper.
 if [ -n "$MAC_IDENTITY" ]; then
   echo "Signing $DMG with Developer ID: $MAC_IDENTITY..."
   codesign --force --sign "$MAC_IDENTITY" --timestamp "$DMG"
@@ -63,7 +64,7 @@ if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_T
     --wait
   echo "Stapling notarization ticket to $DMG..."
   xcrun stapler staple "$DMG"
-  echo "Successfully notarized and stapled! Gatekeeper quarantine will not block this DMG."
+  echo "Successfully notarized and stapled! Gatekeeper can validate this quarantined DMG."
 elif [ -n "$APPLE_KEYCHAIN_PROFILE" ]; then
   echo "Submitting $DMG to Apple Notary Service using keychain profile '$APPLE_KEYCHAIN_PROFILE'..."
   xcrun notarytool submit "$DMG" \
@@ -71,5 +72,5 @@ elif [ -n "$APPLE_KEYCHAIN_PROFILE" ]; then
     --wait
   echo "Stapling notarization ticket to $DMG..."
   xcrun stapler staple "$DMG"
-  echo "Successfully notarized and stapled! Gatekeeper quarantine will not block this DMG."
+  echo "Successfully notarized and stapled! Gatekeeper can validate this quarantined DMG."
 fi
