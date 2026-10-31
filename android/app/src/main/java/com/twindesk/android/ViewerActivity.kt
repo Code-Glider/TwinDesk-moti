@@ -4,6 +4,8 @@
 // small bar (tap the handle at the top): Mirror / Extend, Start / Stop, keyboard, close.
 package com.twindesk.android
 
+import android.graphics.Point
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -67,9 +69,17 @@ class ViewerActivity : ComponentActivity() {
         val m = resources.displayMetrics
         // Physical pixels of this screen, landscape (the viewer is held landscape: a computer's
         // screen is, and Windows' virtual monitor takes no portrait size): the computer makes Extend this shape.
-        val b = windowManager.currentWindowMetrics.bounds
-        val w = b.width().coerceAtLeast(m.widthPixels)
-        val hpx = b.height().coerceAtLeast(m.heightPixels)
+        // currentWindowMetrics is Android 11+ (API 30). Android 10 tablets can pair and
+        // open the viewer too; calling it there crashes before a screen offer is sent.
+        // A few vendor frameworks also omit the method despite reporting API 30+.
+        val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try { windowManager.currentWindowMetrics.bounds }
+            catch (_: NoSuchMethodError) { null }
+        } else null
+        @Suppress("DEPRECATION")
+        val real = Point().also { if (bounds == null) windowManager.defaultDisplay.getRealSize(it) }
+        val w = (bounds?.width() ?: real.x).coerceAtLeast(m.widthPixels)
+        val hpx = (bounds?.height() ?: real.y).coerceAtLeast(m.heightPixels)
         Core.get(this).screen.attach(h, maxOf(w, hpx), minOf(w, hpx))
     }
 
