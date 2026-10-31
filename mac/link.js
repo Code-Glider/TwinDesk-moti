@@ -40,6 +40,7 @@ class Link extends EventEmitter {
     // until connect(). {why: 'local' | released | replaced, message}
     this.stopped = null;
     this.takeover = false; // the next hello takes the session from whoever has it (Take over)
+    this.preferId = null; // connect(takeover, {id}) dials this host, not whichever discovery sees first
     this.busyBy = ''; // the host is in use by someone else: tried again now and then
     this.timers = {};
     this.pairLimit = new PairLimit((why) => this._pairFailed(why)); // shared/pairlimit.js
@@ -69,6 +70,7 @@ class Link extends EventEmitter {
 
   startPairing({ address, port, name }) {
     clearTimeout(this.timers.reconnect);
+    this.preferId = null; // pairing a new device replaces any previous explicit target
     this.pairState = { phase: 'connecting', address, port: port || P.PORT, name: name || address, code: '', error: '' };
     this._connect('pair');
     this._changed();
@@ -106,6 +108,7 @@ class Link extends EventEmitter {
   // Disconnect: stays away until Connect.
   disconnect() {
     this.stopped = { why: 'local', message: '' };
+    this.preferId = null;
     clearTimeout(this.timers.reconnect);
     if (this.authed) this._raw({ t: T.BYE }); // on purpose: the host doesn't wait for us
     this._closeSocket();
@@ -113,11 +116,28 @@ class Link extends EventEmitter {
   }
 
   // Connect again, or Take over (takeover: the host's session with another device ends).
-  connect(takeover = false) {
+  // prefer: a host id, or {id, address, port} from Connect by address, so that host is the one dialled.
+  connect(takeover = false, prefer = null) {
     if (!this.hosts.length || this.pairState) return;
+    const preferId = prefer && typeof prefer === 'object' ? prefer.id : prefer || null;
+    if (preferId && !this.hosts.some((h) => h.id === preferId)) {
+      return this._setStatus(this.status.state, 'That computer is no longer paired. Pair it again.');
+    }
+    if (prefer && typeof prefer === 'object' && prefer.address) {
+      const h = this.hosts.find((x) => x.id === preferId);
+      if (h && (h.address !== prefer.address || (prefer.port && h.port !== prefer.port))) {
+        Object.assign(h, { address: prefer.address, port: prefer.port || h.port });
+        this._save();
+      }
+    }
     this.stopped = null;
     this.takeover = !!takeover;
+    if (preferId !== this.preferId) { this.busyBy = ''; this.lastError = ''; }
+    this.preferId = preferId;
     this.attempt = 0;
+    // Connect by address can be clicked while another guest socket is still up. Switch it,
+    // otherwise the retry timer sees this.ws and silently keeps the wrong computer.
+    if (preferId && this.ws && (!this.host || this.host.id !== preferId)) this._closeSocket();
     this._scheduleReconnect(0);
   }
 
@@ -256,7 +276,7 @@ class Link extends EventEmitter {
       fx: typeof msg.fx === 'string' && /^[0-9a-f]{32}$/.test(msg.fx) ? msg.fx : '', // fast files (shared/fastfile.js); older hosts: none
     };
     this.timers.ping = setInterval(() => {
-      if (Date.now() - this.lastRx > P.TIMEOUT_MS) {
+      if (Date.now() - this.lastRx > P.SESSION_TIMEOUT_MS) {
         this.lastError = 'Stopped answering';
         if (this.ws) this.ws.terminate();
         return;
@@ -320,7 +340,8 @@ class Link extends EventEmitter {
     this.emit('closed', ctx);
   }
 
-  // Reconnect to the most recently used stored host that discovery sees (else the last address).
+  // Honor an explicit Connect-by-address target across retries and transient disconnects;
+  // only generic Connect or Disconnect clears that choice.
   _scheduleReconnect(delay) {
     clearTimeout(this.timers.reconnect);
     if (this.stopped) return this._setStatus('stopped', this.stopped.message);
@@ -335,7 +356,9 @@ class Link extends EventEmitter {
     this.timers.reconnect = setTimeout(() => {
       if (this.pairState || this.ws) return;
       if (!this.canConnect()) return this._setStatus('standby', '');
-      const seen = this.hosts.find((h) => this.resolve(h.id)) || this.hosts[0];
+      const preferred = this.preferId && this.hosts.find((h) => h.id === this.preferId);
+      if (this.preferId && !preferred) return this._setStatus('idle', 'Selected computer is no longer paired. Pair it again.');
+      const seen = preferred || this.hosts.find((h) => this.resolve(h.id)) || this.hosts[0];
       const at = this.resolve(seen.id);
       if (at && (at.address !== seen.address || at.port !== seen.port)) {
         Object.assign(seen, { address: at.address, port: at.port });

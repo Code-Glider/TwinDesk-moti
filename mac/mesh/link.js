@@ -404,7 +404,7 @@ class Link extends EventEmitter {
   _keepalive() {
     const now = Date.now();
     const busy = this.busy();
-    if (now - this.lastRx > (busy ? P.TIMEOUT_MS : P.IDLE_TIMEOUT_MS)) {
+    if (now - this.lastRx > (busy ? P.SESSION_TIMEOUT_MS : P.IDLE_TIMEOUT_MS)) {
       this.lastError = 'Stopped answering';
       if (this.ws) this.ws.terminate();
       return;

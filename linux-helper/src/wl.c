@@ -12,6 +12,7 @@
 // with `screens`). Pinned against an edge both agree again, which is where the edge push is
 // measured. Ahead of the real pointer, a quick flick crossed before it reached the edge.
 #include "helper.h"
+#include "input-probe-cache.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -21,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
@@ -39,6 +41,7 @@ typedef struct {
 
 static In ins[MAX_IN];
 static int nin;
+static InputProbeCache rejected; // no repeat open/close of unsupported evdev nodes on each 3 s scan
 static int uabs = -1, urel = -1;
 static double lastScan;
 
@@ -162,6 +165,14 @@ static int known(const char *path) {
   return 0;
 }
 
+static void reject_input(const char *path, int fd) {
+  struct stat st;
+  // Identity comes from the *opened* device. A later hotplug at the same eventN path
+  // must be inspected again; a failed open is never cached (udev can grant access later).
+  if (fstat(fd, &st) == 0) input_probe_remember(&rejected, path, &st);
+  close(fd);
+}
+
 static void scan(void) {
   lastScan = now_ms();
   DIR *d = opendir("/dev/input");
@@ -172,21 +183,27 @@ static void scan(void) {
     char path[300];
     snprintf(path, sizeof path, "/dev/input/%s", e->d_name);
     if (known(path)) continue;
+    struct stat identity;
+    if (stat(path, &identity) == 0 && input_probe_rejected(&rejected, path, &identity)) continue;
     int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) continue;
     char name[256] = "";
     ioctl(fd, EVIOCGNAME(sizeof name), name);
-    if (!strncmp(name, NAME_PREFIX, strlen(NAME_PREFIX))) { close(fd); continue; } // ours (rule 4)
+    if (!strncmp(name, NAME_PREFIX, strlen(NAME_PREFIX))) { reject_input(path, fd); continue; } // ours (rule 4)
     unsigned long ev[(EV_CNT + 63) / 64] = { 0 }, key[(KEY_CNT + 63) / 64] = { 0 }, rel[(REL_CNT + 63) / 64] = { 0 }, abs[(ABS_CNT + 63) / 64] = { 0 };
-    ioctl(fd, EVIOCGBIT(0, sizeof ev), ev);
-    ioctl(fd, EVIOCGBIT(EV_KEY, sizeof key), key);
-    ioctl(fd, EVIOCGBIT(EV_REL, sizeof rel), rel);
-    ioctl(fd, EVIOCGBIT(EV_ABS, sizeof abs), abs);
+    // A transient ioctl error is not a rejection: retry that node on the next scan.
+    if (ioctl(fd, EVIOCGBIT(0, sizeof ev), ev) < 0 ||
+        (test_bit(ev, EV_KEY) && ioctl(fd, EVIOCGBIT(EV_KEY, sizeof key), key) < 0) ||
+        (test_bit(ev, EV_REL) && ioctl(fd, EVIOCGBIT(EV_REL, sizeof rel), rel) < 0) ||
+        (test_bit(ev, EV_ABS) && ioctl(fd, EVIOCGBIT(EV_ABS, sizeof abs), abs) < 0)) {
+      close(fd);
+      continue;
+    }
     int kind = 0;
     if (test_bit(ev, EV_REL) && test_bit(rel, REL_X) && test_bit(rel, REL_Y)) kind |= K_MOUSE;
     if (test_bit(ev, EV_ABS) && test_bit(abs, ABS_X) && test_bit(key, BTN_TOOL_FINGER) && !test_bit(key, BTN_TOOL_PEN)) kind |= K_PAD;
     if (test_bit(ev, EV_KEY) && test_bit(key, KEY_A) && test_bit(key, KEY_Z) && test_bit(key, KEY_SPACE)) kind |= K_KBD;
-    if (!kind) { close(fd); continue; }
+    if (!kind) { reject_input(path, fd); continue; }
     In *in = &ins[nin++];
     memset(in, 0, sizeof *in);
     in->fd = fd;

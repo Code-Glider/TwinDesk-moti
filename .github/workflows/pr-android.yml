@@ -1,0 +1,31 @@
+name: Android PR compile
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/pr-android.yml'
+  workflow_dispatch:
+
+# Build untrusted PR code without release credentials or repository write access.
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compile Android 10-compatible standard and full variants
+        working-directory: android
+        run: ./gradlew --no-daemon :app:compileStandardDebugKotlin :app:compileFullDebugKotlin

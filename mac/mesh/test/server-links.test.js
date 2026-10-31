@@ -37,12 +37,38 @@ test('keep-alive: a busy client is pinged every PING_MS, an idle one every IDLE_
 
     A.server.setBusy(B.id, true);
     ctx.lastTx = clock.t;
-    ctx.lastRx = clock.t; // B answers in time (the busy timeout is shorter than the idle one)
+    ctx.lastRx = clock.t; // B answers in time
     clock.t += P.PING_MS + 100;
     ctx.lastRx = clock.t;
     A.server.liveness(clock.t);
     assert.strictEqual(pings.length, 2, 'busy: a ping after PING_MS');
     assert.strictEqual(A.server.phoneHolds(), false, 'nothing holds the server');
+  } finally {
+    close(A, B);
+  }
+});
+
+test('a busy IP client tolerates a 4-second scheduler pause and still times out after 15 seconds', async () => {
+  const clock = { t: 1e12 };
+  const A = await node('A', { now: () => clock.t, tick: false });
+  const B = await node('B');
+  try {
+    await pair(B, A);
+    const ctx = A.server.clients.get(B.id);
+    const ws = ctx.ws;
+    A.server.setBusy(B.id, true);
+    const lastRx = clock.t;
+    ctx.lastRx = ws.lastRx = lastRx;
+    ctx.lastTx = ws.lastTx = lastRx;
+
+    clock.t += P.TIMEOUT_MS + 500;
+    A.server.liveness(clock.t);
+    assert.strictEqual(ws.readyState, ws.OPEN, 'background pause must not drop authenticated connection');
+
+    ctx.lastRx = ws.lastRx = lastRx;
+    clock.t = lastRx + P.SESSION_TIMEOUT_MS + 500;
+    A.server.liveness(clock.t);
+    assert.notStrictEqual(ws.readyState, ws.OPEN, 'dead connection is still terminated');
   } finally {
     close(A, B);
   }
