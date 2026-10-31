@@ -37,6 +37,11 @@ jobs:
             node --check "$source"
           done
 
+      - name: Check macOS signing-scope policy (no signing secrets)
+        run: |
+          sh -n mac/build-app.sh
+          sh mac/test/signing-scope.sh
+
       - name: Run platform-independent and socket regressions
         shell: bash
         env:
