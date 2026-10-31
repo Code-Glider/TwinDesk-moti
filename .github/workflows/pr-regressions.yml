@@ -54,6 +54,7 @@ jobs:
             shared/test/phonechat.js
             shared/test/packaging.js
             shared/test/fastfile.js
+            shared/test/windows-screen-resume.js
             mac/mesh/test/server-links.test.js
             mac/mesh/test/mesh-3.test.js
             shared/test/audio-policy-loop.js
