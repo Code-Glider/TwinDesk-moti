@@ -196,16 +196,24 @@ fi
 APP=dist/TwinDesk.app
 if [ -n "$MAC_IDENTITY" ]; then
   # Hardened runtime (for notarization): every piece of code signed on its own, inside out, with
-  # the entitlements: Electron's helper apps need JIT, and macOS gives the microphone, camera and
-  # location only to code that has them (the helpers too). --deep would sign the nested code with
-  # none. Each Mach-O file first (deepest first: adb, the helpers, Electron's libraries), then
-  # the frameworks and helper apps as bundles, the share extension, the app.
+  # appropriate entitlements: Electron's helper apps need JIT, but library code and vendor tools
+  # must not inherit the main app's privacy/runtime exceptions. --deep would sign nested code
+  # without the specific entitlements. Sign leaf Mach-O code first (deepest first), then
+  # framework bundles without entitlements and helper app bundles with their runtime entitlements.
+  . scripts/signing-scope.sh
   find "$APP/Contents" -type f ! -path "$APP/Contents/MacOS/*" ! -path "$APPEX/*" ! -path "$SYSEXT/*" | while IFS= read -r f; do
     file -b "$f" | grep -q 'Mach-O' && printf '%s\t%s\n' "$(printf '%s' "$f" | tr -cd / | wc -c)" "$f"
   done | sort -rn | cut -f2- | while IFS= read -r f; do
-    codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$f"
+    if signing_leaf_needs_entitlements "$f" "$APP" "$(file -b "$f")"; then
+      codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$f"
+    else
+      codesign --force $OPTIONS $SIGN "$ID" "$f"
+    fi
   done
-  for b in "$APP"/Contents/Frameworks/*.framework "$APP"/Contents/Frameworks/*.app; do
+  for b in "$APP"/Contents/Frameworks/*.framework; do
+    [ -e "$b" ] && codesign --force $OPTIONS $SIGN "$ID" "$b"
+  done
+  for b in "$APP"/Contents/Frameworks/*.app; do
     [ -e "$b" ] && codesign --force $OPTIONS $SIGN "$ID" --entitlements "$ENTITLEMENTS" "$b"
   done
   codesign --force $OPTIONS $SIGN "$ID" --entitlements dist/share.entitlements "$APPEX"
