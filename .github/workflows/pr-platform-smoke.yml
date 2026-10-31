@@ -1,0 +1,80 @@
+name: Windows and macOS PR smoke
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Linux regressions and Android compilation have separate workflows. This
+# matrix catches host-specific Node, TLS, timer and socket incompatibilities.
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-platform-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-smoke:
+    name: Node smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The socket tests need ws only; do not install Electron or packaging
+      # dependencies, and do not run dependency lifecycle scripts.
+      - name: Install socket test dependency
+        run: npm install --prefix "$RUNNER_TEMP/twindesk-test-deps" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false --exact ws@8.22.0
+
+      - name: Run shared and socket regressions on native runners
+        env:
+          NODE_PATH: ${{ runner.temp }}/twindesk-test-deps/node_modules
+        run: |
+          set -euo pipefail
+          # Some tests are supplied by independent fix PRs and are optional
+          # until those PRs land. All present tests must pass.
+          tests=(
+            shared/test/mesh-registry.js
+            shared/test/session-heartbeat.js
+            shared/test/kvm-moves.js
+            shared/test/clipsync.js
+            shared/test/received.js
+            shared/test/rezume.js
+            shared/test/phonechat.js
+            shared/test/packaging.js
+            shared/test/fastfile.js
+            shared/test/windows-screen-resume.js
+            mac/mesh/test/server-links.test.js
+            mac/mesh/test/mesh-3.test.js
+            windows/mesh/test/mesh-transport.test.js
+            linux/mesh/test/mesh-transport.test.js
+            shared/test/audio-policy-loop.js
+            shared/test/filerecv-hardening.js
+            mac/mesh/test/connect-plan.test.js
+            mac/mesh/test/connect-target.test.js
+            mac/mesh/test/connect-address-ipc.test.js
+            mac/mesh/test/connect-address-one-ipc.test.js
+          )
+          for spec in "${tests[@]}"; do
+            if [[ -f "$spec" ]]; then
+              echo "::group::$spec"
+              node "$spec"
+              echo "::endgroup::"
+            else
+              echo "Not present in this branch: $spec"
+            fi
+          done

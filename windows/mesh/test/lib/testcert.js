@@ -22,7 +22,11 @@ function loadTestCert() {
   const env = { ...process.env, MSYS_NO_PATHCONV: '1' };
   process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }));
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '2', '-subj', '/CN=Test'], { env, stdio: 'ignore' });
-  execFileSync('openssl', ['pkcs12', '-export', '-out', pfx, '-inkey', key, '-in', cert, '-passout', 'pass:x'], { env, stdio: 'ignore' });
+  // Explicit modern PBE avoids platform-specific PKCS#12 defaults (notably
+  // legacy RC2 on some macOS OpenSSL/LibreSSL builds, unsupported by Node).
+  execFileSync('openssl', ['pkcs12', '-export', '-out', pfx, '-inkey', key, '-in', cert,
+    '-keypbe', 'AES-256-CBC', '-certpbe', 'AES-256-CBC', '-macalg', 'sha256', '-passout', 'pass:x'],
+    { env, stdio: 'ignore' });
   const fp = P.normFingerprint(new crypto.X509Certificate(fs.readFileSync(cert, 'utf8')).fingerprint256);
   cached = { pfx: fs.readFileSync(pfx), passphrase: 'x', fp };
   return cached;
