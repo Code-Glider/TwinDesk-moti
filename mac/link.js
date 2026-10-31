@@ -256,7 +256,7 @@ class Link extends EventEmitter {
       fx: typeof msg.fx === 'string' && /^[0-9a-f]{32}$/.test(msg.fx) ? msg.fx : '', // fast files (shared/fastfile.js); older hosts: none
     };
     this.timers.ping = setInterval(() => {
-      if (Date.now() - this.lastRx > P.TIMEOUT_MS) {
+      if (Date.now() - this.lastRx > P.SESSION_TIMEOUT_MS) {
         this.lastError = 'Stopped answering';
         if (this.ws) this.ws.terminate();
         return;

@@ -47,6 +47,7 @@ jobs:
           # their branches are tested, these files exist and are run automatically.
           tests=(
             shared/test/mesh-registry.js
+            shared/test/session-heartbeat.js
             shared/test/kvm-moves.js
             shared/test/clipsync.js
             shared/test/received.js
@@ -56,6 +57,8 @@ jobs:
             shared/test/fastfile.js
             mac/mesh/test/server-links.test.js
             mac/mesh/test/mesh-3.test.js
+            windows/mesh/test/mesh-transport.test.js
+            linux/mesh/test/mesh-transport.test.js
             shared/test/audio-policy-loop.js
             shared/test/filerecv-hardening.js
             mac/mesh/test/connect-plan.test.js
