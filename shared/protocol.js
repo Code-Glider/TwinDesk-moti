@@ -21,9 +21,10 @@
     // PHONE_GRACE_MS after it drops, so a Wi-Fi blip doesn't hand the session back.
     PHONE_GRACE_MS: 30000,
     PING_MS: 1000,
-    TIMEOUT_MS: 4000, // close the session after this much silence
+    TIMEOUT_MS: 4000, // handshake / hello reply deadline, not the established session's heartbeat
+    SESSION_TIMEOUT_MS: 15000, // an authenticated IP session tolerates background scheduler pauses
     // Multi-device only (docs/mesh.md): many devices at once. A link that is selected, driving or being
-    // driven keeps PING_MS/TIMEOUT_MS; the others are checked more rarely so ten links cost little.
+    // driven keeps PING_MS/SESSION_TIMEOUT_MS; the others are checked more rarely so ten links cost little.
     MAX_DEVICES: 10,
     IDLE_PING_MS: 5000,
     IDLE_TIMEOUT_MS: 15000,
@@ -39,7 +40,7 @@
 
     // Mouse & keyboard sharing
     KVM_TAKE_TIMEOUT_MS: 1000, // owner goes home if no kvm.accept by then
-    KVM_SILENCE_MS: 2000, // while driving/driven: no message from the peer for this long = link lost
+    KVM_SILENCE_MS: 2000, // while driving/driven: release input on silence, even if the session remains connected
     KVM_SILENCE_BLE_MS: 6000, // the same through Bluetooth (a slower, burstier link)
     KVM_MOVE_BLE_MS: 16, // through Bluetooth: cursor moves summed and sent at most this often
     KVM_BLE_BACKLOG: 512, // … and held (still summed) while this many bytes wait for the radio
