@@ -1,0 +1,72 @@
+name: PR regression checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Pull requests run code from the proposed branch. Give them no write access and no secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-regressions-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The mesh socket tests only need ws; avoid installing Electron, Android or
+      # platform packaging dependencies just to exercise the protocol handlers.
+      - name: Install mesh test dependency
+        run: npm install --prefix "$RUNNER_TEMP/twindesk-test-deps" --no-save --ignore-scripts --no-audit --no-fund --package-lock=false --exact ws@8.22.0
+
+      - name: Check changed feature entrypoints parse
+        run: |
+          for source in windows/sound.js linux/sound.js windows/filerecv.js linux/filerecv.js mac/link.js mac/ipc.js mac/mesh/ipc.js; do
+            node --check "$source"
+          done
+
+      - name: Run platform-independent and socket regressions
+        shell: bash
+        env:
+          NODE_PATH: ${{ runner.temp }}/twindesk-test-deps/node_modules
+        run: |
+          set -euo pipefail
+          # The optional cases are introduced by the accompanying fix PRs. When
+          # their branches are tested, these files exist and are run automatically.
+          tests=(
+            shared/test/mesh-registry.js
+            shared/test/kvm-moves.js
+            shared/test/clipsync.js
+            shared/test/received.js
+            shared/test/rezume.js
+            shared/test/phonechat.js
+            shared/test/packaging.js
+            shared/test/fastfile.js
+            mac/mesh/test/server-links.test.js
+            mac/mesh/test/mesh-3.test.js
+            shared/test/audio-policy-loop.js
+            shared/test/filerecv-hardening.js
+            mac/mesh/test/connect-plan.test.js
+            mac/mesh/test/connect-target.test.js
+            mac/mesh/test/connect-address-ipc.test.js
+            mac/mesh/test/connect-address-one-ipc.test.js
+          )
+          for spec in "${tests[@]}"; do
+            if [[ -f "$spec" ]]; then
+              echo "::group::$spec"
+              node "$spec"
+              echo "::endgroup::"
+            fi
+          done
