@@ -94,9 +94,16 @@ class FastFiles {
     return new Promise((resolve, reject) => {
       const hash = crypto.createHash('sha256');
       let sent = 0, done = false;
+      let source = null;
+      const closeSource = () => {
+        if (!source) return;
+        source.destroy();
+        source = null;
+      };
       const finish = (err, sha) => {
         if (done) return;
         done = true;
+        closeSource(); // cancellation must release the source file handle on Windows
         this.outgoing.delete(id);
         if (!err) return resolve(sha);
         if (err.early) this.broken = true;
@@ -108,6 +115,7 @@ class FastFiles {
       });
       this.outgoing.set(id, { req, fail: (e) => { req.destroy(); finish(e); } });
       req.setTimeout(IDLE_MS, () => req.destroy(new Error('stalled')));
+      req.once('close', closeSource);
       req.on('error', (e) => finish(sent ? e : early(e.message)));
       req.on('response', (res) => {
         res.resume();
@@ -118,7 +126,9 @@ class FastFiles {
         });
       });
       this._pinned(req, s.fp, () => {
+        if (done || req.destroyed) return; // cancelled before TLS verification ended
         const rs = fs.createReadStream(path, { highWaterMark: READ_BYTES });
+        source = rs;
         rs.on('data', (b) => { hash.update(b); sent += b.length; onBytes(b.length); });
         rs.on('error', (e) => { req.destroy(); finish(e); });
         rs.pipe(req);

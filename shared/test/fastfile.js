@@ -11,6 +11,7 @@ const os = require('os');
 const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
+const { Readable } = require('stream');
 const { execFileSync } = require('child_process');
 const P = require('../protocol.js');
 const { FastFiles } = require('../fastfile.js');
@@ -178,17 +179,37 @@ async function check(rx, id, p) {
   {
     const { host, guest, close } = await pair();
     const p = file('c.bin', 64 * 1024 * 1024);
-    const sending = guest.fx.send('c', p, 64 * 1024 * 1024, () => {});
-    await until(() => host.rx.got.get('c') && host.rx.got.get('c').bytes > 0);
-    host.send({ t: T.FILE_CANCEL, id: 'c' }); // the receiver cancels
-    host.fx.cancel('c');
-    await assert.rejects(sending, (e) => !e.early);
-    const at = host.rx.got.get('c').bytes;
-    await new Promise((r) => setTimeout(r, 200));
-    assert.strictEqual(host.rx.got.get('c').bytes, at, 'nothing after the cancel');
-    assert.ok(at < 64 * 1024 * 1024);
-    assert.strictEqual(guest.fx.usable(), true, 'a cancel doesn’t stop fast files');
-    await close();
+    // Keep the source readable open after its first chunk. A closed HTTPS
+    // request must destroy the source, not strand an open file descriptor on
+    // Windows. The normal transfer tests above still use real disk streams.
+    const source = new Readable({
+      read() {
+        if (this.sentFirst) return;
+        this.sentFirst = true;
+        this.push(Buffer.alloc(512 * 1024, 0x5a));
+      },
+    });
+    const createReadStream = fs.createReadStream;
+    fs.createReadStream = function (filePath, ...args) {
+      return filePath === p ? source : createReadStream.call(this, filePath, ...args);
+    };
+    try {
+      const sending = guest.fx.send('c', p, 64 * 1024 * 1024, () => {});
+      await until(() => host.rx.got.get('c') && host.rx.got.get('c').bytes > 0);
+      host.send({ t: T.FILE_CANCEL, id: 'c' }); // the receiver cancels
+      host.fx.cancel('c');
+      await assert.rejects(sending, (e) => !e.early);
+      await until(() => source.destroyed && source.closed, 1000);
+      const at = host.rx.got.get('c').bytes;
+      await new Promise((r) => setTimeout(r, 200));
+      assert.strictEqual(host.rx.got.get('c').bytes, at, 'nothing after the cancel');
+      assert.ok(at < 64 * 1024 * 1024);
+      assert.strictEqual(guest.fx.usable(), true, 'a cancel doesn’t stop fast files');
+    } finally {
+      fs.createReadStream = createReadStream;
+      source.destroy();
+      await close();
+    }
   }
 
   // Windows may briefly keep a completed file open for indexing/AV scanning.
