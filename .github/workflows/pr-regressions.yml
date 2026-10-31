@@ -37,6 +37,15 @@ jobs:
             node --check "$source"
           done
 
+      - name: Test Linux evdev probe caching
+        run: |
+          if [ -f linux-helper/test/input-probe-cache.c ]; then
+            cc -std=gnu11 -Wall -Wextra -Werror -Ilinux-helper/src \
+              linux-helper/src/input-probe-cache.c linux-helper/test/input-probe-cache.c \
+              -o "$RUNNER_TEMP/input-probe-cache-test"
+            "$RUNNER_TEMP/input-probe-cache-test"
+          fi
+
       - name: Run platform-independent and socket regressions
         shell: bash
         env:
