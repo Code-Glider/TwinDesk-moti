@@ -74,7 +74,11 @@ function pair(opts = {}) {
     });
     host.server.listen(0, '127.0.0.1', () => {
       host.port = host.server.address().port;
-      resolve({ host, guest, close: () => { host.fx.reset(); guest.fx.reset(); host.server.close(); } });
+      resolve({ host, guest, close: async () => {
+        host.fx.reset();
+        guest.fx.reset();
+        await new Promise((done, fail) => host.server.close((err) => err ? fail(err) : done()));
+      } });
     });
   });
 }
@@ -126,7 +130,7 @@ async function check(rx, id, p) {
     for (let i = 0; i < small.length; i += 4) await Promise.all(small.slice(i, i + 4).map((p, j) => send(guest, `s${i + j}`, p)));
     for (let i = 0; i < small.length; i++) await check(host.rx, `s${i}`, small[i]);
     console.log(`  300 small files: ${Date.now() - t0} ms`);
-    close();
+    await close();
   }
 
   // Not the paired computer (another fingerprint): nothing goes, e.early, and fast files stop.
@@ -135,7 +139,7 @@ async function check(rx, id, p) {
     const p = file('x.bin', 1000);
     await assert.rejects(guest.fx.send('x', p, 1000, () => {}), (e) => e.early === true);
     assert.strictEqual(guest.fx.usable(), false, 'broken for the session');
-    close();
+    await close();
   }
 
   // A wrong token: refused before any byte, e.early.
@@ -144,7 +148,7 @@ async function check(rx, id, p) {
     const p = file('y.bin', 1000);
     await assert.rejects(guest.fx.send('y', p, 1000, () => {}), (e) => e.early === true);
     assert.strictEqual(host.rx.got.size, 0, 'nothing delivered');
-    close();
+    await close();
   }
 
   // The guest can't reach the host for a pull: it says so, and the host's send is e.early.
@@ -154,20 +158,20 @@ async function check(rx, id, p) {
     await assert.rejects(host.fx.send('z', p, 5000, () => {}), (e) => e.early === true);
     assert.strictEqual(host.fx.usable(), false);
     assert.strictEqual(guest.rx.got.size, 0, 'nothing delivered');
-    close();
+    await close();
   }
 
   // Bluetooth and links netlink made: never.
   {
     const a = await pair({ transport: 'ble' });
     assert.strictEqual(a.guest.fx.usable(), false, 'Bluetooth');
-    a.close();
+    await a.close();
     const b = await pair({ address: '192.168.49.1' });
     assert.strictEqual(b.guest.fx.usable(), false, 'Wi-Fi Direct');
-    b.close();
+    await b.close();
     const c = await pair({ address: '169.254.10.2' });
     assert.strictEqual(c.guest.fx.usable(), true, 'a cable (link-local)');
-    c.close();
+    await c.close();
   }
 
   // Cancelled half-way by the receiver: the sender's promise fails (not early), nothing more arrives.
@@ -184,10 +188,12 @@ async function check(rx, id, p) {
     assert.strictEqual(host.rx.got.get('c').bytes, at, 'nothing after the cancel');
     assert.ok(at < 64 * 1024 * 1024);
     assert.strictEqual(guest.fx.usable(), true, 'a cancel doesn’t stop fast files');
-    close();
+    await close();
   }
 
-  fs.rmSync(dir, { recursive: true, force: true });
+  // Windows may briefly keep a completed file open for indexing/AV scanning.
+  // The bounded retry still fails if transfer handles remain permanently open.
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   console.log('fastfile: ok');
 })().catch((e) => {
   console.error(e);
