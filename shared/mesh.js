@@ -325,7 +325,7 @@ class Mesh extends EventEmitter {
 // Keep-alive timing for one link. Busy = selected, driving or driven.
 function keepalive({ busy }) {
   return busy
-    ? { intervalMs: P.PING_MS, timeoutMs: P.TIMEOUT_MS }
+    ? { intervalMs: P.PING_MS, timeoutMs: P.SESSION_TIMEOUT_MS }
     : { intervalMs: P.IDLE_PING_MS, timeoutMs: P.IDLE_TIMEOUT_MS };
 }
 

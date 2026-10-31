@@ -15,8 +15,16 @@ concurrency:
 
 jobs:
   node-regressions:
-    runs-on: ubuntu-24.04
+    name: Node regressions (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +45,16 @@ jobs:
             node --check "$source"
           done
 
+      - name: Test Linux evdev probe caching
+        if: runner.os == 'Linux'
+        run: |
+          if [ -f linux-helper/test/input-probe-cache.c ]; then
+            cc -std=gnu11 -Wall -Wextra -Werror -Ilinux-helper/src \
+              linux-helper/src/input-probe-cache.c linux-helper/test/input-probe-cache.c \
+              -o "$RUNNER_TEMP/input-probe-cache-test"
+            "$RUNNER_TEMP/input-probe-cache-test"
+          fi
+
       - name: Run platform-independent and socket regressions
         shell: bash
         env:
@@ -47,6 +65,7 @@ jobs:
           # their branches are tested, these files exist and are run automatically.
           tests=(
             shared/test/mesh-registry.js
+            shared/test/session-heartbeat.js
             shared/test/kvm-moves.js
             shared/test/clipsync.js
             shared/test/received.js
@@ -54,8 +73,11 @@ jobs:
             shared/test/phonechat.js
             shared/test/packaging.js
             shared/test/fastfile.js
+            shared/test/windows-screen-resume.js
             mac/mesh/test/server-links.test.js
             mac/mesh/test/mesh-3.test.js
+            windows/mesh/test/mesh-transport.test.js
+            linux/mesh/test/mesh-transport.test.js
             shared/test/audio-policy-loop.js
             shared/test/filerecv-hardening.js
             mac/mesh/test/connect-plan.test.js

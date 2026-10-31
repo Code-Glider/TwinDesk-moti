@@ -535,7 +535,7 @@ class Link {
       if (!ws || !ws.transport) continue;
       const ble = ws.transport === 'ble';
       const rx = Math.max(ws.lastRx || 0, (ble && this.ble && this.ble.lastDown) || 0);
-      if (now - rx > (ble ? P.BLE_TIMEOUT_MS : busy ? P.TIMEOUT_MS : P.IDLE_TIMEOUT_MS)) {
+      if (now - rx > (ble ? P.BLE_TIMEOUT_MS : busy ? P.SESSION_TIMEOUT_MS : P.IDLE_TIMEOUT_MS)) {
         if (ws === this.ws) this.lastError = '{Name} stopped answering';
         ws.terminate();
       } else if (ws.readyState === WebSocket.OPEN && (busy ? now - (ws.lastPing || 0) >= P.PING_MS : now - (ws.lastTx || 0) >= P.IDLE_PING_MS)) {

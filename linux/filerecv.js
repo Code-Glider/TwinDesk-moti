@@ -47,9 +47,16 @@ class FileRecv {
     if (!this.settings.files.acceptFromMac) return refuse('not_allowed');
     if (!(m.size >= 0) || m.size > P.FILE_MAX_BYTES) return refuse('too_big');
     const name = safeName(m.name);
-    fs.mkdirSync(this.dir, { recursive: true });
-    const tmp = path.join(this.dir, m.id + '.part');
-    const f = { id: m.id, name, size: m.size, got: 0, seq: 0, hash: crypto.createHash('sha256'), out: fs.createWriteStream(tmp), tmp, done: false };
+    let tmp, out;
+    try {
+      fs.mkdirSync(this.dir, { recursive: true });
+      tmp = path.join(this.dir, P.randomHex(16) + '.part'); // never use the peer's ID as a path
+      out = fs.createWriteStream(tmp, { flags: 'wx' }); // don't follow a pre-existing file/symlink
+    } catch (_) {
+      return refuse('storage_error'); // out of space or a folder we cannot write: no accepted transfer
+    }
+    const f = { id: m.id, name, size: m.size, got: 0, seq: 0, hash: crypto.createHash('sha256'), out, tmp, done: false };
+    f.out.on('error', (e) => { f.error = f.error || e; }); // told at file.end
     if (this.files.size === 0) this.target = null; // a new drag
     this.files.set(m.id, f);
     this.link.send({ t: T.FILE_ACCEPT, id: m.id });
@@ -61,6 +68,11 @@ class FileRecv {
     if (!f || f.done || m.seq !== f.seq || (typeof m.data !== 'string' && !Buffer.isBuffer(m.data))) return;
     if (!f.out) openOut(f);
     const buf = (typeof m.data === 'string' ? Buffer.from(m.data, 'base64') : m.data); // a Buffer from fast files (shared/fastfile.js)
+    if (f.got + buf.length > f.size) { // more than it offered: not written (it could fill the disk)
+      if (f.batch) return this._batchFail(f, 'size mismatch');
+      this._drop(f.id);
+      return this.link.send({ t: T.FILE_DONE, id: f.id, ok: false, error: 'size mismatch' });
+    }
     f.seq++;
     f.got += buf.length;
     f.hash.update(buf);
@@ -77,7 +89,8 @@ class FileRecv {
     const f = this.files.get(m.id);
     if (!f || f.done) return;
     f.done = true;
-    f.out.end(() => {
+    f.out.end((err) => {
+      if (f.error || err) return this._finish(f, false, (f.error || err).message); // a full disk: part of it is missing
       const ok = f.got === f.size && f.hash.digest('hex') === m.sha256;
       if (!ok) {
         this._finish(f, false, 'checksum mismatch');
@@ -111,7 +124,7 @@ class FileRecv {
 
   _finish(f, ok, pathOrError) {
     this.files.delete(f.id);
-    try { if (!ok) fs.unlinkSync(f.tmp); } catch (_) { /* gone */ }
+    if (!ok) discardPart(f);
     this.link.send(ok ? { t: T.FILE_DONE, id: f.id, ok: true, path: pathOrError } : { t: T.FILE_DONE, id: f.id, ok: false, error: pathOrError });
     this.last = { name: f.name, ok, text: ok ? 'Saved to ' + path.dirname(pathOrError) : pathOrError, at: Date.now() };
     if (!this.files.size) this.target = null;
@@ -122,8 +135,7 @@ class FileRecv {
     const f = this.files.get(id);
     if (!f) return;
     this.files.delete(id);
-    f.out.destroy();
-    try { fs.unlinkSync(f.tmp); } catch (_) { /* not written yet */ }
+    discardPart(f);
     if (!this.files.size) this.target = null;
     this.onChange();
   }
@@ -152,7 +164,7 @@ class FileRecv {
       if (m.drop === 'send' && !this.settings.files.acceptFromMac) return refuse('not_allowed');
       // total: the whole batch's bytes (file.offer `bytes`, or what fclip.offer said); 0 = unknown.
       const total = Number(m.bytes) > 0 ? Number(m.bytes) : pasted ? pasted.bytes : 0;
-      b = { kind: m.drop, dir: pasted ? pasted.dir : receivedDir(this.settings, app.getPath('downloads')), reveal: pasted ? pasted.reveal : true, count, done: 0, ok: 0, tops: new Map(), placed: [], total, got: 0, at: Date.now() };
+      b = { kind: m.drop, dir: pasted ? pasted.dir : receivedDir(this.settings, app.getPath('downloads')), reveal: pasted ? pasted.reveal : true, count, done: 0, ok: 0, tops: new Map(), paths: new Set(), placed: [], total, got: 0, at: Date.now() };
       this.batches.set(m.batch, b);
       this.expected.delete(m.batch);
     }
@@ -164,12 +176,17 @@ class FileRecv {
     }
     const final = path.join(b.dir, b.tops.get(segs[0]), ...segs.slice(1));
     const tmp = final + '.macshare-part';
+    if (b.paths.has(final)) { // separate IDs must not write the same file simultaneously
+      this._batchStep(m.batch, false);
+      return refuse('bad_message');
+    }
     try {
       fs.mkdirSync(path.dirname(tmp), { recursive: true });
     } catch (e) {
       this._batchStep(m.batch, false);
       return refuse('not_allowed');
     }
+    b.paths.add(final);
     // The Mac offers a whole folder at once: the file is opened with its first chunk.
     this.bfiles.set(m.id, { id: m.id, batch: m.batch, name: segs[segs.length - 1], size, final, tmp, got: 0, seq: 0, hash: crypto.createHash('sha256'), out: null, done: false });
     this.link.send({ t: T.FILE_ACCEPT, id: m.id });
@@ -180,7 +197,8 @@ class FileRecv {
     if (f.done) return;
     f.done = true;
     if (!f.out) openOut(f); // an empty file
-    f.out.end(() => {
+    f.out.end((err) => {
+      if (f.error || err) return this._batchFail(f, (f.error || err).message); // a full disk: part of it is missing
       if (f.got !== f.size || f.hash.digest('hex') !== m.sha256) return this._batchFail(f, f.got !== f.size ? 'size mismatch' : 'checksum mismatch');
       try {
         fs.renameSync(f.tmp, f.final);
@@ -196,8 +214,7 @@ class FileRecv {
   // error null: cancelled or disconnected (nothing to tell the sender).
   _batchFail(f, error) {
     if (!this.bfiles.delete(f.id)) return;
-    if (f.out) f.out.destroy();
-    try { fs.unlinkSync(f.tmp); } catch (_) { /* not written */ }
+    discardPart(f);
     if (error) this.link.send({ t: T.FILE_DONE, id: f.id, ok: false, error });
     this._batchStep(f.batch, false);
   }
@@ -231,8 +248,19 @@ function safeName(name) {
 }
 
 function openOut(f) {
-  f.out = fs.createWriteStream(f.tmp);
-  f.out.on('error', () => {}); // the size/checksum check at the end fails instead
+  f.out = fs.createWriteStream(f.tmp, { flags: 'wx' });
+  f.out.on('error', (e) => { f.error = f.error || e; }); // told at file.end (the checksum is of what came, not what was written)
+}
+
+// A stream can be destroyed *before* its asynchronous open finishes. Unlink now and again
+// after close, otherwise a cancelled/oversized transfer can leave an orphaned .part file.
+function discardPart(f) {
+  const unlink = () => { try { fs.unlinkSync(f.tmp); } catch (_) { /* not there yet */ } };
+  if (f.out) {
+    f.out.once('close', unlink);
+    f.out.destroy();
+  }
+  unlink();
 }
 
 // "Photos/2024/a.jpg" → safe Windows segments joined by '/', or null (.., empty, too deep).
