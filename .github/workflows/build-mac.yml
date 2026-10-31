@@ -12,19 +12,41 @@ on:
         required: false
         default: main
 
-# Write: draft releases and release asset uploads require write permissions.
+# Build/test branches never need a write token. The publish job gets write only after build success.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: macos-latest
+    outputs:
+      source_sha: ${{ steps.source_sha.outputs.sha }}
+    # Branch test builds may run repository-controlled scripts, so never supply signing secrets
+    # to them. Only the default-branch workflow building main may access release credentials.
+    env:
+      TRUSTED_MAIN: ${{ (inputs.ref || 'main') == 'main' && github.ref == 'refs/heads/main' }}
 
     steps:
+      # Fail before checkout/installation when a tagged release requests arbitrary branch code.
+      - name: Verify tagged release source
+        if: inputs.tag != ''
+        env:
+          RELEASE_SOURCE_REF: ${{ inputs.ref || 'main' }}
+        run: |
+          if [ "$RELEASE_SOURCE_REF" != main ] || [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo '::error::Tagged macOS releases must build main from the main workflow ref.'
+            exit 1
+          fi
+
       # main unless another branch is asked for (ref), whichever branch the run was started from.
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || 'main' }}
+          persist-credentials: false
+
+      - name: Record exact build source commit
+        id: source_sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -36,9 +58,10 @@ jobs:
 
       - uses: ./.github/actions/android-full
         with:
-          keystore: ${{ secrets.ANDROID_KEYSTORE }}
+          keystore: ${{ env.TRUSTED_MAIN == 'true' && secrets.ANDROID_KEYSTORE || '' }}
 
       - name: Configure Developer ID certificate (if secret provided)
+        if: env.TRUSTED_MAIN == 'true'
         id: signing-setup
         env:
           DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
@@ -75,10 +98,21 @@ jobs:
             rm -f "$CERT_PATH"
             if [ -n "$ID" ]; then
               echo "MAC_IDENTITY=$ID" >> "$GITHUB_ENV"
+              echo 'TWIN_DESK_DEVELOPER_ID_READY=1' >> "$GITHUB_ENV"
               echo "SIGNING_KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
               echo "Configured Developer ID signing identity: $ID"
             fi
           fi
+
+      - name: Check release credentials and report signing status
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SOURCE_REF: ${{ inputs.ref || 'main' }}
+          APPLE_ID: ${{ env.TRUSTED_MAIN == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ env.TRUSTED_MAIN == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ env.TRUSTED_MAIN == 'true' && secrets.APPLE_TEAM_ID || '' }}
+        run: sh mac/scripts/release-guard.sh
 
       - name: Install dependencies
         working-directory: mac
@@ -97,12 +131,12 @@ jobs:
           npm run dist
           npm run dmg
         env:
-          MAC_APP_PROFILE_BASE64: ${{ secrets.MAC_APP_PROFILE_BASE64 }}
-          MAC_CAMERA_PROFILE_BASE64: ${{ secrets.MAC_CAMERA_PROFILE_BASE64 }}
-          MAC_IDENTITY: ${{ env.MAC_IDENTITY || secrets.MAC_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MAC_APP_PROFILE_BASE64: ${{ env.TRUSTED_MAIN == 'true' && secrets.MAC_APP_PROFILE_BASE64 || '' }}
+          MAC_CAMERA_PROFILE_BASE64: ${{ env.TRUSTED_MAIN == 'true' && secrets.MAC_CAMERA_PROFILE_BASE64 || '' }}
+          MAC_IDENTITY: ${{ env.TRUSTED_MAIN == 'true' && (env.MAC_IDENTITY || secrets.MAC_IDENTITY) || '' }}
+          APPLE_ID: ${{ env.TRUSTED_MAIN == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ env.TRUSTED_MAIN == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ env.TRUSTED_MAIN == 'true' && secrets.APPLE_TEAM_ID || '' }}
 
       - name: Cleanup signing keychain
         if: always()
@@ -116,13 +150,34 @@ jobs:
         with:
           name: twindesk-macos-dmg
           path: mac/dist/*.dmg
+          if-no-files-found: error
 
-      # Straight onto the release, no download and re-upload.
+  publish:
+    if: inputs.tag != ''
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified macOS DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: twindesk-macos-dmg
+          path: dist
+
       - name: Upload to the release
-        if: inputs.tag != ''
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
         run: |
-          gh release view "${{ inputs.tag }}" >/dev/null 2>&1 || gh release create "${{ inputs.tag }}" --draft --target main --title "${{ inputs.tag }}" --notes "" || true
-          gh release upload "${{ inputs.tag }}" mac/dist/*.dmg --clobber
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::No verified build source commit to tag.'
+            exit 1
+          fi
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --draft --target "$SOURCE_SHA" --title "$RELEASE_TAG" --notes ""
+          fi
+          gh release upload "$RELEASE_TAG" dist/*.dmg --clobber

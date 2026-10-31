@@ -37,6 +37,12 @@ jobs:
             node --check "$source"
           done
 
+      - name: Validate macOS release policy (no signing secrets)
+        run: |
+          sh -n mac/scripts/release-guard.sh
+          sh -n mac/build-dmg.sh
+          sh mac/test/release-guard.sh
+
       - name: Run platform-independent and socket regressions
         shell: bash
         env:
