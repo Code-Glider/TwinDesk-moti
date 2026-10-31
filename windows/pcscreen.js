@@ -8,9 +8,10 @@
 // while it is false. A peer that never sends one (an older app) counts as watching, after a moment
 // for its first policy to arrive. We tell the viewer what we share (`screen.state`) and, when
 // "Let <peer> start and switch this screen" is on (pcScreen.remote), obey its `screen.ctl`.
-const { desktopCapturer, screen: displays } = require('electron');
+const { desktopCapturer, screen: displays, powerMonitor } = require('electron');
 const P = require('../shared/protocol.js');
 const RemoteInput = require('./remote-input');
+const CaptureRetry = require('./capture-retry');
 
 const T = P.T;
 
@@ -26,9 +27,16 @@ class PcScreen {
     this.busy = false;
     this.lastMode = 'mirror'; // what screen.ctl {share:true} starts (the last mode used)
     this.stateKey = ''; // the last screen.state sent on this connection
+    this.retry = new CaptureRetry(() => this.apply(), opts.retryTimers);
+    // Windows loses DXGI duplication across Win+L, and a display change isn't guaranteed on
+    // unlock. Retry immediately after unlock/resume, with timed backoff while it stays locked.
+    this.onWake = () => { this.retry.reset(); this.apply(); };
+    powerMonitor.on('unlock-screen', this.onWake);
+    powerMonitor.on('resume', this.onWake);
 
     const link = this.link;
     link.on('welcome', () => {
+      this.retry.reset();
       this.mac = { accept: false, width: 0, height: 0, told: false };
       this.stateKey = '';
       clearTimeout(this.policyTimer);
@@ -37,7 +45,7 @@ class PcScreen {
       }, 1500);
       this.apply();
     });
-    link.on('closed', () => { clearTimeout(this.policyTimer); this.mac.accept = false; this.stateKey = ''; this.apply(); });
+    link.on('closed', () => { this.retry.reset(); clearTimeout(this.policyTimer); this.mac.accept = false; this.stateKey = ''; this.apply(); });
     // The session moved (Bluetooth -> a Wi-Fi Direct link, or back): a session offered on the old path
     // never connects on the new one; the transport is part of the key, so apply() starts again.
     link.on('transport', () => this.apply());
@@ -57,7 +65,11 @@ class PcScreen {
     this.sender.on('state', (session, s) => {
       if (!this.sending || session !== this.sending.session) return;
       Object.assign(this.status, s);
-      if (s.status === 'ended' || s.status === 'failed') this._stopSend(true); // apply() retries on the next change
+      if (s.status === 'live') this.retry.reset();
+      if (s.status === 'ended' || s.status === 'failed') {
+        this._stopSend(true);
+        this.retry.later(); // no viewer policy/display event is needed to start again
+      }
       this.onChange();
     });
     this.sender.on('stats', (session, st) => {
@@ -79,6 +91,7 @@ class PcScreen {
     const was = this.mode;
     if (mode !== 'off') this.lastMode = mode;
     this.mode = mode;
+    if (mode === 'off') this.retry.reset();
     this.status.error = '';
     this.onChange();
     if (mode === 'extend' && was !== 'extend') {
@@ -180,24 +193,29 @@ class PcScreen {
     // Bluetooth can't carry the picture: it starts once the session is on Wi-Fi (netlink.js).
     const transport = (this.link.current && this.link.current.transport) || 'ip';
     const want = connected && this.mode !== 'off' && !this.busy && this.mac.accept && transport !== 'ble';
-    if (!want) return this._stopSend(connected);
+    if (!want) { this.retry.reset(); return this._stopSend(connected); }
     const d = await this._target();
-    if (!d) return this._stopSend(true);
+    if (!d) { this.retry.later(); return this._stopSend(true); }
     const rect = displays.dipToScreenRect(null, d.bounds);
     const [width, height] = this._streamSize(rect);
     const fps = PcScreen.fps(d);
     const key = [d.id, rect.x, rect.y, rect.width, rect.height, width, this.cfg.mbps, this.cfg.sound, fps, transport].join(',');
     if (this.sending && this.sending.key === key) return;
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
+    let sources;
+    try { sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }); }
+    catch (e) { this.status.error = `Capturing: ${e.message}`; this.retry.later(); return this._stopSend(true); }
     const src = sources.find((s) => s.display_id === String(d.id));
     if (!src) {
       this.status.error = 'Windows didn’t offer that monitor for capture';
+      this.retry.later();
       return this._stopSend(true);
     }
     this._stopSend(true);
     // A phone over Wi-Fi: a high rate only fills the radio's queues (latency), it isn't sharper there.
     const mbps = this.link.peerOs === P.OS.ANDROID ? Math.min(16, this.cfg.mbps) : this.cfg.mbps;
-    const session = this.sender.start({ sourceId: src.id, width, height, mbps, fps, audio: this.cfg.sound, offer: { kind: 'screen' } });
+    let session;
+    try { session = this.sender.start({ sourceId: src.id, width, height, mbps, fps, audio: this.cfg.sound, offer: { kind: 'screen' } }); }
+    catch (e) { this.status.error = `Capturing: ${e.message}`; this.retry.later(); return; }
     this.sending = { session, displayId: d.id, rect, key };
     this.stats = null;
     Object.assign(this.status, { status: 'starting', error: '', name: d.label || src.name, width: rect.width, height: rect.height });
@@ -278,6 +296,9 @@ class PcScreen {
 
   // Sharing ends with the app; the virtual monitor too.
   shutdown() {
+    this.retry.reset();
+    powerMonitor.removeListener('unlock-screen', this.onWake);
+    powerMonitor.removeListener('resume', this.onWake);
     this._stopSend(true);
     if (this.mode === 'extend') this.vdd.setOn(false);
   }

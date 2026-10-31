@@ -222,7 +222,7 @@ class Server extends EventEmitter {
           const ble = ws.transport === 'ble';
           // through Bluetooth a big message takes seconds: bytes still arriving count as a sign of life
           const rx = Math.max(primary ? ctx.lastRx || 0 : ws.lastRx || 0, (ws.blePort && this.blePorts.get(ws.blePort)) || 0);
-          const timeout = busy ? (ble ? P.BLE_TIMEOUT_MS : P.TIMEOUT_MS) : (ble ? P.BLE_TIMEOUT_MS : P.IDLE_TIMEOUT_MS);
+          const timeout = busy ? (ble ? P.BLE_TIMEOUT_MS : P.SESSION_TIMEOUT_MS) : (ble ? P.BLE_TIMEOUT_MS : P.IDLE_TIMEOUT_MS);
           const every = busy ? P.PING_MS : P.IDLE_PING_MS;
           const tx = primary ? ctx.lastTx || 0 : ws.lastTx || 0;
           if (now - rx > timeout) {

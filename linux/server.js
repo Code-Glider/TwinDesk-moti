@@ -162,7 +162,7 @@ class Server extends EventEmitter {
         // Each of the session's sockets on its own (a quiet fallback goes; the session lives on).
         for (const ws of [ctx.ws, ctx.alt]) {
           if (!ws) continue;
-          const limit = ws.transport === 'ble' ? P.BLE_TIMEOUT_MS : P.TIMEOUT_MS;
+          const limit = ws.transport === 'ble' ? P.BLE_TIMEOUT_MS : P.SESSION_TIMEOUT_MS;
           const rx = Math.max(ws.lastRx, (ws.blePort && this.blePorts.get(ws.blePort)) || 0); // through Bluetooth, bytes of a big message count too
           if (now - rx > limit) {
             console.log(`[server] ${ctx.name || ctx.address} silent for ${limit} ms on ${ws.transport === 'ble' ? 'Bluetooth' : ws.address}, closing`);

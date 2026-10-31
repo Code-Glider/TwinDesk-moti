@@ -6,10 +6,20 @@
 
 const assert = require('assert');
 const { Mesh, keepalive } = require('../mesh.js');
+const P = require('../protocol.js');
 
 // The documented values (docs/mesh.md, protocol.js on feature/mesh). Written out here on purpose:
 // the tests check the numbers the design promises, not whatever a constant file says.
-const DOC = { MAX_DEVICES: 10, PING_MS: 1000, TIMEOUT_MS: 4000, IDLE_PING_MS: 5000, IDLE_TIMEOUT_MS: 15000 };
+const DOC = { MAX_DEVICES: 10, PING_MS: 1000, SESSION_TIMEOUT_MS: 15000, IDLE_PING_MS: 5000, IDLE_TIMEOUT_MS: 15000 };
+
+// A tolerant network heartbeat must never extend the time for which stale remote input
+// may be held, nor make an unauthenticated handshake wait 15 seconds.
+assert.strictEqual(P.TIMEOUT_MS, 4000, 'hello timeout stays short');
+assert.strictEqual(P.SESSION_TIMEOUT_MS, 15000, 'authenticated IP session tolerates background throttling');
+assert.strictEqual(P.KVM_SILENCE_MS, 2000, 'remote input deadman remains fast');
+assert.strictEqual(P.KVM_TAKE_TIMEOUT_MS, 1000, 'KVM takeover deadline remains fast');
+assert.strictEqual(P.HELPER_DEADMAN_MS, 1500, 'native helper deadman remains fast');
+assert.strictEqual(P.BLE_TIMEOUT_MS, 20000, 'Bluetooth keeps its separate allowance');
 
 // Fake send: records what was sent to a peer and reports success.
 function sink(log, id) {
@@ -180,7 +190,7 @@ function sink(log, id) {
 
 // 5. keepalive timing.
 {
-  assert.deepStrictEqual(keepalive({ busy: true }), { intervalMs: DOC.PING_MS, timeoutMs: DOC.TIMEOUT_MS });
+  assert.deepStrictEqual(keepalive({ busy: true }), { intervalMs: DOC.PING_MS, timeoutMs: DOC.SESSION_TIMEOUT_MS });
   assert.deepStrictEqual(keepalive({ busy: false }), { intervalMs: DOC.IDLE_PING_MS, timeoutMs: DOC.IDLE_TIMEOUT_MS });
   assert.deepStrictEqual(keepalive({}), { intervalMs: DOC.IDLE_PING_MS, timeoutMs: DOC.IDLE_TIMEOUT_MS }, 'not busy by default');
 }

@@ -349,7 +349,7 @@ function plan(paths) {
 }
 
 function refuseText(why) {
-  return { not_allowed: '{Name} doesn’t accept dropped files (its Files tab)', too_big: 'Too big for {name}', busy: '{Name} is busy with another file' }[why] || '{Name} refused it';
+  return { not_allowed: '{Name} doesn’t accept dropped files (its Files tab)', too_big: 'Too big for {name}', busy: '{Name} is busy with another file', storage_error: '{Name} cannot save the file (check disk space and folder permissions)' }[why] || '{Name} refused it';
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
